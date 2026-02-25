@@ -18,7 +18,13 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Dashboard - BarberApp",
   description: "Sistema de gestão para barbearias premium",
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0",
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
   themeColor: "#09090B",
 };
 
