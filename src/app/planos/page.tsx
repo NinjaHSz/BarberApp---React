@@ -56,12 +56,12 @@ export default function PlansPage() {
 
           const startDate = latestRenov?.[0]?.data || c.plano_pagamento;
 
-          // 2. Count usages from that date forward
+          // 2. Count usages from that date forward (only count entries with "DIA", excluding "RENOVAÇÃO")
           let query = supabase
             .from("agendamentos")
             .select("id", { count: "exact", head: true })
             .ilike("cliente", clientName)
-            .or(`procedimento.ilike.%dia%,procedimento.ilike.%renova%`);
+            .ilike("procedimento", "%dia%");
 
           if (startDate) {
             query = query.gte("data", startDate);

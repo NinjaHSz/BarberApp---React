@@ -1,7 +1,23 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 
 export function useClients() {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("clients_realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "clientes" }, () => {
+        queryClient.invalidateQueries({ queryKey: ["clients"] });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
   return useQuery({
     queryKey: ["clients"],
     queryFn: async () => {
@@ -30,6 +46,21 @@ export function useProcedures() {
 }
 
 export function useExpenses() {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("expenses_realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "saidas" }, () => {
+        queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
   return useQuery({
     queryKey: ["expenses"],
     queryFn: async () => {
@@ -58,6 +89,21 @@ export function useCards() {
 }
 
 export function useAppointments() {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("appointments_realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "agendamentos" }, () => {
+        queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
   return useQuery({
     queryKey: ["appointments"],
     queryFn: async () => {

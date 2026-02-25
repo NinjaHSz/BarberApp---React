@@ -9,15 +9,20 @@ import {
   EyeOff, 
   Search, 
   Trash2, 
-  ExternalLink, 
   ChevronLeft, 
   ChevronRight,
   RefreshCw,
   CalendarPlus,
   Edit,
+  Copy,
+  Check,
+  Sun,
+  CloudSun,
+  List,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import React, { useState, useMemo, useCallback, memo, useDeferredValue } from "react";
+import React, { useState, useMemo, useCallback, memo, useDeferredValue, useEffect } from "react";
 import { 
   format, 
   addDays, 
@@ -92,12 +97,12 @@ const RecordRow = memo(function RecordRowComponent({
 
       const startDate = latestRenov?.[0]?.data || renewDate;
 
-      // 2. Count usage since that dynamic start
+      // 2. Count usage since that dynamic start (only count entries with "DIA", excluding "RENOVAÇÃO")
       let qUsage = supabase
         .from("agendamentos")
         .select("id", { count: "exact", head: true })
         .ilike("cliente", match.nome)
-        .or(`procedimento.ilike.%dia%,procedimento.ilike.%renova%`);
+        .ilike("procedimento", "%dia%");
       
       if (startDate) {
         qUsage = qUsage.gte("data", startDate);
@@ -106,9 +111,10 @@ const RecordRow = memo(function RecordRowComponent({
       const { count } = await qUsage;
       const usedSoFar = count ?? 0;
       const limite = match.limite_cortes || 0;
-      const dayInCycle = limite > 0 ? usedSoFar % limite : usedSoFar;
-      const isRenew = isRenewalDay || dayInCycle === 0;
-      updates.service = isRenew ? "RENOVAÇÃO 1° DIA" : `${dayInCycle + 1}° DIA`;
+      const dayInCycle = usedSoFar; // Removed modulo if logic is already date-bounded by latestRenov
+      
+      const isRenew = isRenewalDay;
+      updates.service = isRenew ? "RENOVAÇÃO" : `${dayInCycle + 1}° DIA`;
       updates.paymentMethod = isRenew ? "PIX" : "PLANO";
       if (isRenew && match.valor_plano) updates.value = match.valor_plano;
     } else if (match?.preset) {
@@ -282,6 +288,11 @@ export default function AgendaPage() {
   const deferredSearchTerm = useDeferredValue(searchTerm);
   const [showEmptySlots, setShowEmptySlots] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [copiedSlots, setCopiedSlots] = useState<string[]>([]);
+  const [periodFilterName, setPeriodFilterName] = useState("");
+  const [periodFilter, setPeriodFilter] = useState("todos");
+  const [showCopyMenu, setShowCopyMenu] = useState(false);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<Partial<Appointment> | null>(null);
@@ -429,6 +440,7 @@ export default function AgendaPage() {
     // Records outside the schedule window
     unhandledRecords.forEach(r => result.push(r));
     const final = result.sort((a, b) => a.time.localeCompare(b.time));
+
     return showEmptySlots ? final : final.filter(r => !r.isEmpty);
   }, [records, deferredSearchTerm, showEmptySlots, selectedDateStr]);
 
@@ -448,6 +460,49 @@ export default function AgendaPage() {
     setIsSyncing(false); 
   };
 
+  const handleCopySchedule = useCallback((period: string = "todos") => {
+    // Filtramos para manter APENAS os horários vazios/disponíveis
+    let filtered = slots.filter(s => (s.isEmpty || s.client === "---") && !s.service?.includes("FECHADO") && s.client !== "PAUSA");
+    
+    if (period === "manha") {
+      filtered = filtered.filter(s => parseInt(s.time.split(":")[0]) < 12);
+    } else if (period === "tarde") {
+      filtered = filtered.filter(s => {
+        const h = parseInt(s.time.split(":")[0]);
+        const m = parseInt(s.time.split(":")[1]);
+        const totalMinutes = h * 60 + m;
+        return totalMinutes >= 13 * 60 && totalMinutes <= (20 * 60 + 20);
+      });
+    }
+
+    if (filtered.length === 0) return;
+
+    const dateFormatted = format(currentDate, "dd/MM/yyyy", { locale: ptBR });
+    const periodName = period === "manha" ? "Manhã" : period === "tarde" ? "Tarde" : "Todos";
+    let text = `📅 *AGENDA — ${dateFormatted} (${periodName.toUpperCase()})*\n\n`;
+    
+    const times: string[] = [];
+    filtered.forEach(s => {
+      const timeStr = s.time.substring(0, 5);
+      const isVacant = s.isEmpty || s.client === "---";
+      const clientName = isVacant ? "DISPONÍVEL" : s.client.toUpperCase();
+      const serviceName = isVacant ? "" : ` (${s.service.toUpperCase()})`;
+      
+      text += `• ${timeStr} - ${clientName}${serviceName}\n`;
+      times.push(timeStr);
+    });
+
+    navigator.clipboard.writeText(text);
+    setPeriodFilterName(periodName);
+    setCopiedSlots(times);
+    setCopied(true);
+    setTimeout(() => {
+      setCopied(false);
+      setCopiedSlots([]);
+      setPeriodFilterName("");
+    }, 2500);
+  }, [slots, currentDate]);
+
   const openAddModal = useCallback((time: string) => { setEditingRecord({ time, date: selectedDateStr, client: "", service: "", value: 0, paymentMethod: "PIX", observations: "" }); setIsModalOpen(true); }, [selectedDateStr]);
   const openEditModal = useCallback((record: Appointment) => { setEditingRecord(record); setIsModalOpen(true); }, []);
   const handleSaveModal = useCallback(async (formData: Partial<Appointment>) => {
@@ -466,6 +521,11 @@ export default function AgendaPage() {
   const dayOptions = daysInMonth.map((d: Date) => ({ value: d.getDate(), label: `${format(d, 'EEE', { locale: ptBR }).toUpperCase().slice(0, 3)} ${format(d, 'dd')}` }));
   const monthOptions = [ { value: 1, label: "JAN" }, { value: 2, label: "FEV" }, { value: 3, label: "MAR" }, { value: 4, label: "ABR" }, { value: 5, label: "MAI" }, { value: 6, label: "JUN" }, { value: 7, label: "JUL" }, { value: 8, label: "AGO" }, { value: 9, label: "SET" }, { value: 10, label: "OUT" }, { value: 11, label: "NOV" }, { value: 12, label: "DEZ" } ];
   const yearOptions = [ { value: 2024, label: "'24" }, { value: 2025, label: "'25" }, { value: 2026, label: "'26" } ];
+  const periodOptions = [
+    { value: "manha", label: "Manhã", icon: Sun },
+    { value: "tarde", label: "Tarde", icon: CloudSun },
+    { value: "todos", label: "Todos", icon: List }
+  ];
 
   return (
     <div className="px-4 py-8 md:px-8 space-y-6 animate-in fade-in slide-in-from-right-4 duration-500 pb-32 max-w-7xl mx-auto">
@@ -489,6 +549,68 @@ export default function AgendaPage() {
         <div><h2 className="text-text-primary text-3xl font-bold">Agenda</h2><p className="text-text-secondary text-sm mt-1">Sincronização Ativa</p></div>
         <div className="relative flex flex-row gap-2 items-center w-full md:w-auto">
           <button onClick={() => openAddModal("08:00")} className="flex items-center justify-center w-12 h-12 md:w-10 md:h-10 rounded-full bg-brand-primary text-surface-page hover:scale-110 transition-all shadow-lg shadow-brand-primary/50 shrink-0 border-none"><Plus size={20} /></button>
+          
+          <div className="relative flex items-center">
+            {/* Botão de Trigger / Cópia principal */}
+            <button 
+              onClick={() => setShowCopyMenu(!showCopyMenu)} 
+              className={cn(
+                 "flex items-center justify-center w-12 h-12 md:w-10 md:h-10 rounded-xl border-none bg-surface-section/50 transition-all shrink-0 hover:text-brand-primary",
+                 (copied || showCopyMenu) ? "text-brand-primary" : "text-text-secondary"
+              )}
+              title="Copiar Agenda"
+            >
+              {copied ? <Check size={18} /> : <Copy size={18} />}
+            </button>
+
+            {/* Menu Dropdown de Período */}
+            {showCopyMenu && (
+              <div className="absolute right-0 top-full mt-2 bg-surface-section border border-white/5 rounded-2xl p-2 shadow-2xl z-[120] flex flex-col min-w-[150px] animate-in fade-in zoom-in-95 duration-200">
+                {periodOptions.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => {
+                      setShowCopyMenu(false);
+                      handleCopySchedule(opt.value);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold text-text-secondary hover:bg-white/5 hover:text-white transition-all border-none"
+                  >
+                    <opt.icon size={16} className="text-text-muted" />
+                    <span>{opt.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            
+            {/* Alerta de Cópia - FIXED BOTTOM (Igual ao Mockup) */}
+            {copied && (
+              <div className="fixed bottom-28 md:bottom-12 left-1/2 -translate-x-1/2 bg-surface-section border border-white/5 rounded-[2rem] p-7 shadow-[0_30px_60px_rgba(0,0,0,0.9)] z-[200] min-w-[340px] max-w-[90vw] animate-in fade-in slide-in-from-bottom-8 duration-500 overflow-hidden">
+                <div className="flex items-center gap-4">
+                  {/* Left Icon with Glow */}
+                  <div className="relative shrink-0">
+                    <div className="absolute inset-0 bg-white/40 blur-2xl rounded-full" />
+                    <div className="w-14 h-14 rounded-full bg-white flex items-center justify-center text-black relative shadow-[0_0_20px_rgba(255,255,255,0.3)]">
+                      <Check size={28} strokeWidth={4} />
+                    </div>
+                  </div>
+
+                  {/* Header Text */}
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-text-muted">Sucesso</span>
+                    <h4 className="text-2xl font-black text-white leading-none">{periodFilterName}</h4>
+                  </div>
+                </div>
+
+                {/* Hours horizontal list (The Pill) */}
+                <div className="mt-6 bg-[#0c0c0e] rounded-[1.2rem] py-4 px-5 border border-white/5 shadow-inner">
+                   <p className="text-[10px] font-black text-white/70 tracking-[0.15em] text-center whitespace-nowrap overflow-hidden text-ellipsis">
+                    {copiedSlots.join(" - ")}
+                   </p>
+                </div>
+              </div>
+            )}
+          </div>
+
           <button onClick={() => setShowEmptySlots(!showEmptySlots)} className={cn("flex items-center justify-center w-12 h-12 md:w-10 md:h-10 rounded-xl border-none bg-surface-section/50 transition-all shrink-0", showEmptySlots ? "text-brand-primary" : "text-text-secondary")}>{showEmptySlots ? <EyeOff size={18} /> : <Eye size={18} />}</button>
           <div className="relative flex-1 md:w-80"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" size={18} /><input type="text" placeholder="Buscar agendamento..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="bg-surface-section border-none h-12 md:h-10 pl-11 pr-4 rounded-xl text-sm text-text-primary outline-none focus:ring-1 focus:ring-brand-primary w-full" /></div>
         </div>

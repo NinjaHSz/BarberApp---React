@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/lib/providers";
 import { Sidebar } from "@/components/layout/sidebar";
+import { MobileDock } from "@/components/layout/mobile-dock";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,9 +34,10 @@ export default function RootLayout({
       >
         <Providers>
           <Sidebar />
-          <main className="flex-1 h-full overflow-auto custom-scroll relative">
+          <main className="flex-1 h-full overflow-auto custom-scroll relative md:pb-0 pb-28">
             {children}
           </main>
+          <MobileDock />
         </Providers>
       </body>
     </html>

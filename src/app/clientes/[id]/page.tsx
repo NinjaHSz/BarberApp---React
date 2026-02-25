@@ -1,8 +1,8 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useClients, useSupabase, useAppointments } from "@/hooks/use-data";
-import { ChevronLeft, Crown, Wand2, Trash2, Calendar, TrendingUp, History, Info, RotateCcw, Plus, Clock, CreditCard } from "lucide-react";
+import { useClients, useSupabase, useAppointments, useProcedures } from "@/hooks/use-data";
+import { ChevronLeft, Crown, Wand2, Trash2, Calendar, TrendingUp, History, Info, RotateCcw, Plus, Clock, CreditCard, Edit3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useMemo, useEffect } from "react";
 import { format, parseISO } from "date-fns";
@@ -10,6 +10,7 @@ import { ptBR } from "date-fns/locale";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { InlineInput } from "@/components/shared/inline-input";
+import { InlineAutocomplete } from "@/components/shared/inline-autocomplete";
 
 export default function ClientProfilePage() {
   const { id } = useParams();
@@ -17,6 +18,7 @@ export default function ClientProfilePage() {
   const supabase = useSupabase();
   const { data: clients = [], isLoading: loadingClients } = useClients();
   const { data: appointments = [], isLoading: loadingAppointments } = useAppointments();
+  const { data: procedures = [] } = useProcedures();
 
   const [showPreset, setShowPreset] = useState(false);
   const [dbUsage, setDbUsage] = useState(0);
@@ -53,6 +55,14 @@ export default function ClientProfilePage() {
     return { used, pct, over: used >= limit && limit > 0 };
   }, [dbUsage, client]);
 
+  const serviceSuggestions = useMemo(() => 
+    procedures.map(p => ({ 
+      id: String(p.id), label: p.nome, value: p.nome, 
+      subLabel: p.valor ? `R$ ${p.valor.toFixed(2)}` : undefined 
+    })), [procedures]);
+
+  const paymentMethods = ["PIX", "DINHEIRO", "CARTÃO", "PLANO MENSAL", "PLANO SEMESTRAL", "PLANO ANUAL", "CORTESIA"];
+
   // Fetch real usage count from DB
   useEffect(() => {
     if (!client?.nome) return;
@@ -68,12 +78,12 @@ export default function ClientProfilePage() {
 
       const startDate = latestRenov?.[0]?.data || client.plano_pagamento;
 
-      // 2. Count usages from that date forward
+      // 2. Count usages from that date forward (only count entries with "DIA", excluding "RENOVAÇÃO")
       let query = supabase
         .from("agendamentos")
         .select("id", { count: "exact", head: true })
         .ilike("cliente", client.nome)
-        .or(`procedimento.ilike.%dia%,procedimento.ilike.%renova%`);
+        .ilike("procedimento", "%dia%");
 
       if (startDate) {
         query = query.gte("data", startDate);
@@ -92,6 +102,21 @@ export default function ClientProfilePage() {
       if (error) throw error;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["clients"] }),
+  });
+
+  const updateAppointmentMutation = useMutation({
+    mutationFn: async ({ id: apptId, updates }: { id: string, updates: any }) => {
+      const dbUpdates: any = {};
+      if (updates.service !== undefined) dbUpdates.procedimento = updates.service;
+      if (updates.value !== undefined) dbUpdates.valor = updates.value;
+      if (updates.observations !== undefined) dbUpdates.observacoes = updates.observations;
+      if (updates.paymentMethod !== undefined) dbUpdates.forma_pagamento = updates.paymentMethod;
+      if (updates.time !== undefined) dbUpdates.horario = updates.time;
+
+      const { error } = await supabase.from("agendamentos").update(dbUpdates).eq("id", apptId);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["appointments"] }),
   });
 
   const deleteAppointmentMutation = useMutation({
@@ -317,26 +342,48 @@ export default function ClientProfilePage() {
                     </div>
                     <div className="flex items-center gap-1.5 text-text-muted">
                         <Clock size={12} />
-                        <span className="text-[11px] font-bold">{appt.time?.substring(0, 5)}</span>
+                        <InlineInput
+                          type="text"
+                          value={appt.time?.substring(0, 5)}
+                          onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { time: v } })}
+                          className="text-[11px] font-bold p-0 bg-transparent hover:bg-transparent h-auto"
+                        />
                     </div>
                   </div>
 
                   <div className="flex-1 min-w-0 md:pl-4 space-y-0.5">
                     <div className="flex items-center gap-3">
-                      <h4 className="text-[12px] font-black text-white uppercase tracking-wide group-hover:text-brand-primary transition-colors cursor-default">
-                        {appt.service}
-                      </h4>
-                      <span className="px-2 py-0.5 rounded-lg bg-white/5 text-[8px] font-black text-text-muted uppercase tracking-widest">{appt.paymentMethod}</span>
+                      <InlineAutocomplete
+                        value={appt.service}
+                        suggestions={serviceSuggestions}
+                        onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { service: v } })}
+                        className="text-[12px] font-black text-white uppercase tracking-wide group-hover:text-brand-primary transition-colors h-auto"
+                      />
+                      <select 
+                        value={appt.paymentMethod || "PIX"}
+                        onChange={(e) => updateAppointmentMutation.mutate({ id: appt.id, updates: { paymentMethod: e.target.value } })}
+                        className="px-2 py-0.5 rounded-lg bg-white/5 text-[8px] font-black text-text-muted uppercase tracking-widest border-none outline-none cursor-pointer hover:text-white transition-all appearance-none"
+                      >
+                        {paymentMethods.map(p => <option key={p} value={p} className="bg-surface-section">{p}</option>)}
+                      </select>
                     </div>
-                    <p className="text-[10px] text-text-muted italic truncate max-w-lg cursor-default">
-                      {appt.observations || "Sem observações registradas..."}
-                    </p>
+                    <InlineInput
+                      value={appt.observations || ""}
+                      placeholder="Adicionar observação..."
+                      onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { observations: v } })}
+                      className="text-[10px] text-text-muted italic truncate max-w-lg p-0 bg-transparent hover:bg-white/5 transition-all text-left block"
+                    />
                   </div>
 
                   <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end mt-4 md:mt-0">
                     <div className="flex items-center gap-1.5 font-display font-black text-lg text-white">
                       <span className="text-[10px] text-text-muted">R$</span>
-                      {(appt.value || 0).toFixed(0)}
+                      <InlineInput
+                        type="number"
+                        value={appt.value?.toString() || "0"}
+                        onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { value: parseFloat(v) || 0 } })}
+                        className="p-0 bg-transparent hover:bg-white/5 transition-all h-auto w-16"
+                      />
                     </div>
                     <button 
                       onClick={() => { if(confirm("Excluir este agendamento do histórico?")) deleteAppointmentMutation.mutate(appt.id) }}
