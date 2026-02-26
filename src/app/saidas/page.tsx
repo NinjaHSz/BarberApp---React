@@ -7,6 +7,7 @@ import { useState, useMemo } from "react";
 import { format, parseISO, startOfWeek, endOfWeek, isWithinInterval, startOfMonth, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { PremiumSelector } from "@/components/shared/premium-selector";
+import { useAgenda } from "@/lib/contexts/agenda-context";
 import { Modal } from "@/components/shared/modal";
 import { InlineInput } from "@/components/shared/inline-input";
 import { AutocompleteInput } from "@/components/shared/autocomplete-input";
@@ -25,7 +26,7 @@ export default function ExpensesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<any>(null);
 
-  const selectedDate = new Date(); // In actual app, this might come from a global date filter
+  const { selectedDate } = useAgenda();
 
   const filteredExpenses = useMemo(() => {
     let result = [...expenses];
@@ -252,97 +253,130 @@ export default function ExpensesPage() {
       </div>
 
       {/* Desktop Table Header */}
-      <div className="hidden md:grid grid-cols-[120px_130px_1fr_100px_110px_120px_80px] bg-white/[0.02] border-none text-[9px] font-black text-text-muted uppercase tracking-widest px-6 py-4 items-center rounded-t-3xl">
+      {/* Desktop Table Header */}
+      <div className="hidden md:grid md:grid-cols-[100px_120px_1fr_100px_100px_100px_80px] bg-white/[0.02] border-none text-[10px] font-black text-text-secondary uppercase tracking-widest px-6 py-5 items-center rounded-t-[2rem]">
         <div>Vencimento</div>
-        <div>Cartão/Origem</div>
+        <div>Cartão</div>
         <div>Descrição</div>
         <div className="text-center">Valor</div>
         <div className="text-center">Status</div>
-        <div className="text-center">Pagamento</div>
-        <div className="text-right">Ações</div>
+        <div className="text-center">Pago em</div>
+        <div className="text-right pr-4">Ações</div>
       </div>
 
       {/* Table Body */}
-      <div className="space-y-1 md:space-y-0 md:divide-y md:divide-white/[0.02]">
+      <div className="space-y-1 md:space-y-0 md:bg-surface-section/30 md:rounded-b-[2rem] border-none overflow-hidden">
         {filteredExpenses.length === 0 ? (
-          <div className="px-8 py-20 text-center text-text-muted italic text-[10px] uppercase font-bold tracking-widest opacity-30">
+          <div className="p-12 text-center text-text-muted uppercase text-[10px] font-black tracking-widest italic">
             Nenhuma conta registrada
           </div>
         ) : (
           filteredExpenses.map((expense) => (
-            <div key={expense.id} className="grid grid-cols-1 md:grid-cols-[120px_130px_1fr_100px_110px_120px_80px] items-center px-4 md:px-6 py-4 md:py-3 transition-colors group bg-surface-section/20 hover:bg-surface-section/40 rounded-2xl md:rounded-none border-none">
-              {/* Vencimento */}
-              <div className="flex items-center gap-2">
-                <div className={cn(
-                  "w-1.5 h-1.5 rounded-full",
-                  expense.paga ? "bg-white/20" : "bg-brand-primary"
-                )} />
-                <InlineInput
-                  type="text"
-                  value={expense.vencimento ? format(parseISO(expense.vencimento), "dd/MM/yyyy") : "--"}
-                  onSave={(v) => {
-                    // Very simple date parse dd/mm/yyyy -> yyyy-mm-dd
-                    const parts = v.split("/");
-                    if (parts.length === 3) {
-                      const iso = `${parts[2]}-${parts[1]}-${parts[0]}`;
-                      updateMutation.mutate({ id: expense.id, data: { vencimento: iso } });
-                    }
-                  }}
-                  className="text-[12px] font-bold text-white px-0 bg-transparent hover:bg-transparent"
-                />
+            <div key={expense.id}>
+              {/* Desktop Row */}
+              <div className="hidden md:grid md:grid-cols-[100px_120px_1fr_100px_100px_100px_80px] items-center px-6 py-3 transition-colors group relative border-none hover:bg-white/[0.02]">
+                {/* Vencimento */}
+                <div className="text-xs font-bold text-text-primary/80">
+                  <InlineInput
+                    type="text"
+                    value={expense.vencimento ? format(parseISO(expense.vencimento), "dd/MM") : "--/--"}
+                    onSave={(v) => {
+                      const parts = v.split("/");
+                      if (parts.length === 2) {
+                        const year = new Date().getFullYear();
+                        const iso = `${year}-${parts[1]}-${parts[0]}`;
+                        updateMutation.mutate({ id: expense.id, data: { vencimento: iso } });
+                      }
+                    }}
+                    className="px-0 bg-transparent hover:bg-transparent"
+                  />
+                </div>
+
+                {/* Cartao */}
+                <div className="min-w-0">
+                  <InlineInput
+                    value={expense.cartao || "DINHEIRO"}
+                    onSave={(v) => updateMutation.mutate({ id: expense.id, data: { cartao: v.toUpperCase() } })}
+                    className="text-[10px] font-black text-brand-primary uppercase tracking-tight px-0 bg-transparent hover:bg-transparent truncate"
+                  />
+                </div>
+
+                {/* Descricao */}
+                <div className="min-w-0">
+                  <InlineInput
+                    value={expense.descricao || ""}
+                    onSave={(v) => updateMutation.mutate({ id: expense.id, data: { descricao: v.toUpperCase() } })}
+                    className="font-bold text-sm text-text-primary uppercase truncate px-0 bg-transparent hover:bg-transparent"
+                  />
+                </div>
+
+                {/* Valor */}
+                <div className="text-center font-bold text-sm text-brand-primary/90">
+                  <InlineInput
+                    type="number"
+                    prefix="R$"
+                    value={expense.valor?.toFixed(2) || "0.00"}
+                    onSave={(v) => updateMutation.mutate({ id: expense.id, data: { valor: parseFloat(v) || 0 } })}
+                    className="px-0 bg-transparent hover:bg-transparent justify-center"
+                  />
+                </div>
+
+                {/* Status */}
+                <div className="flex justify-center">
+                  <button
+                    onClick={() => handleTogglePaid(expense)}
+                    className={cn(
+                      "px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border-none transition-all",
+                      expense.paga ? "bg-white/10 text-white/40" : "bg-brand-primary/20 text-brand-primary"
+                    )}
+                  >
+                    {expense.paga ? "PAGO" : "PENDENTE"}
+                  </button>
+                </div>
+
+                {/* Pago em */}
+                <div className="text-center text-[11px] font-bold text-text-secondary italic">
+                  {expense.data_pagamento ? format(parseISO(expense.data_pagamento), "dd/MM") : "--/--"}
+                </div>
+
+                {/* Ações */}
+                <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => handleOpenModal(expense)} className="w-8 h-8 rounded-xl bg-white/5 text-text-secondary hover:bg-brand-primary hover:text-surface-page transition-all flex items-center justify-center border-none">
+                    <Edit2 size={14} />
+                  </button>
+                  <button onClick={() => handleDelete(expense.id)} className="w-8 h-8 rounded-xl bg-white/5 text-rose-500/50 hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center border-none">
+                    <Trash2 size={14} />
+                   </button>
+                </div>
               </div>
 
-              {/* Cartao */}
-              <div>
-                <InlineInput
-                  value={expense.cartao || "DINHEIRO"}
-                  onSave={(v) => updateMutation.mutate({ id: expense.id, data: { cartao: v.toUpperCase() } })}
-                  className="text-[10px] font-black text-brand-primary uppercase tracking-tight px-0 bg-transparent hover:bg-transparent"
-                />
-              </div>
-
-              {/* Descricao */}
-              <div>
-                <InlineInput
-                  value={expense.descricao || ""}
-                  onSave={(v) => updateMutation.mutate({ id: expense.id, data: { descricao: v.toUpperCase() } })}
-                  className="font-black text-xs text-white uppercase tracking-wider px-0 bg-transparent hover:bg-transparent"
-                />
-              </div>
-
-              {/* Valor */}
-              <div className="text-center">
-                <InlineInput
-                  type="number"
-                  prefix="R$"
-                  value={expense.valor?.toFixed(2) || "0.00"}
-                  onSave={(v) => updateMutation.mutate({ id: expense.id, data: { valor: parseFloat(v) || 0 } })}
-                  className="font-black text-[12px] text-white px-0 bg-transparent hover:bg-transparent justify-center"
-                />
-              </div>
-
-              {/* Status */}
-              <div className="flex justify-center">
-                <button
-                  onClick={() => handleTogglePaid(expense)}
-                  className={cn(
-                    "px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border-none transition-all",
-                    expense.paga ? "bg-white/10 text-white/40" : "bg-brand-primary/20 text-brand-primary"
-                  )}
-                >
-                  {expense.paga ? "PAGO" : "PENDENTE"}
-                </button>
-              </div>
-
-              {/* Data Pagamento */}
-              <div className="text-center text-[11px] font-bold text-text-muted">
-                {expense.data_pagamento ? format(parseISO(expense.data_pagamento), "dd/MM") : "--/--"}
-              </div>
-
-              {/* Ações */}
-              <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => handleOpenModal(expense)} className="p-2 text-text-muted hover:text-white transition-colors border-none"><Edit2 size={14} /></button>
-                <button onClick={() => handleDelete(expense.id)} className="p-2 text-text-muted hover:text-rose-500 transition-colors border-none"><Trash2 size={14} /></button>
+              {/* Mobile Row - Agenda Style */}
+              <div className="md:hidden grid grid-cols-[60px_1fr_100px] gap-4 items-center px-6 py-4 bg-surface-section/40 rounded-2xl mx-1 my-1 border-none relative">
+                <div className="text-[13px] text-text-primary font-bold">
+                  {expense.vencimento ? format(parseISO(expense.vencimento), "dd/MM") : "--/--"}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[13px] font-black truncate uppercase text-white">
+                    {expense.descricao}
+                  </div>
+                  <div className="text-[9px] font-black text-brand-primary/60 uppercase tracking-widest truncate">
+                    {expense.cartao || "DINHEIRO"}
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <div className="text-[13px] font-black text-brand-primary">
+                    R$ {expense.valor?.toFixed(2)}
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => handleTogglePaid(expense)} className={cn(
+                      "text-[8px] font-black uppercase tracking-tighter",
+                      expense.paga ? "text-white/20" : "text-brand-primary animate-pulse"
+                    )}>
+                      {expense.paga ? "PAGO" : "PENDER"}
+                    </button>
+                    <button onClick={() => handleOpenModal(expense)} className="text-text-muted"><Edit2 size={12} /></button>
+                  </div>
+                </div>
               </div>
             </div>
           ))

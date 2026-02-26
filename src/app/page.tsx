@@ -32,6 +32,7 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { PremiumSelector } from "@/components/shared/premium-selector";
+import { useAgenda } from "@/lib/contexts/agenda-context";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -79,7 +80,7 @@ function KPICard({ title, value, icon: Icon, colSpan = "" }: { title: string; va
 }
 
 export default function DashboardPage() {
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const { selectedDate: currentDate, setSelectedDate: setCurrentDate } = useAgenda();
   const [chartTimeframe, setChartTimeframe] = useState("mensal");
   const { data: clients = [], isLoading: loadingClients } = useClients();
   const { data: appointments = [], isLoading: loadingAppointments } = useAppointments();

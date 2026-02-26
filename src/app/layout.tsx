@@ -18,6 +18,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Dashboard - BarberApp",
   description: "Sistema de gestão para barbearias premium",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "BarberApp",
+  },
+  icons: {
+    apple: "/logo.png",
+  },
 };
 
 export const viewport = {
@@ -40,7 +48,7 @@ export default function RootLayout({
       >
         <Providers>
           <Sidebar />
-          <main className="flex-1 h-full overflow-auto custom-scroll relative md:pb-0 pb-28">
+          <main className="flex-1 h-full overflow-auto custom-scroll relative">
             {children}
           </main>
           <MobileDock />

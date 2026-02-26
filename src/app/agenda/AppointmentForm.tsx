@@ -4,6 +4,7 @@ import { useState, useCallback, memo, useRef, useEffect } from "react";
 import { Search, Calendar, Clock, Coffee, Copy, Sun, Sunset, Moon, List, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 import { AutocompleteInput, type Suggestion } from "@/components/shared/autocomplete-input";
+import { PaymentSelector } from "@/components/shared/payment-selector";
 import { supabase } from "@/lib/supabase";
 
 interface AppointmentRecord {
@@ -27,9 +28,10 @@ interface AppointmentFormProps {
   currentDate: Date;
   clients: any[];
   onSave: (record: AppointmentRecord) => void;
+  onCopy?: (label: string, times: string[]) => void;
+  onDateChange?: (date: Date) => void;
 }
 
-const PAYMENT_OPTIONS = ["PIX", "DINHEIRO", "CARTÃO", "PLANO", "CORTESIA"];
 
 export const AppointmentForm = memo(function AppointmentForm({
   initial,
@@ -39,6 +41,8 @@ export const AppointmentForm = memo(function AppointmentForm({
   currentDate,
   clients,
   onSave,
+  onCopy,
+  onDateChange,
 }: AppointmentFormProps) {
   const [form, setForm] = useState<AppointmentRecord>(initial);
   const [showPeriodPicker, setShowPeriodPicker] = useState(false);
@@ -91,42 +95,46 @@ export const AppointmentForm = memo(function AppointmentForm({
       const renewDate = clientObj.plano_pagamento;
       const isRenewalDay = renewDate === today;
 
-      let dayLabel: string;
-      if (isRenewalDay) {
-        dayLabel = "RENOVAÇÃO 1° DIA";
-      } else {
-        // Query real count in cycle — exclude 'renova' from qPlan to avoid double counting
-        // 1. Find the latest "RENOVAÇÃO" appointment date for this client
-        const { data: latestRenov } = await supabase
-          .from("agendamentos")
-          .select("data")
-          .ilike("cliente", clientObj.nome)
-          .ilike("procedimento", "%renova%")
-          .order("data", { ascending: false })
-          .limit(1);
+      // 1. Find the latest "RENOVAÇÃO" appointment date for this client
+      const { data: latestRenov } = await supabase
+        .from("agendamentos")
+        .select("data")
+        .ilike("cliente", clientObj.nome)
+        .ilike("procedimento", "%renova%")
+        .order("data", { ascending: false })
+        .limit(1);
 
-        const startDate = latestRenov?.[0]?.data || renewDate;
+      const dbRenovDate = latestRenov?.[0]?.data;
+      const manualResetDate = clientObj.plano_pagamento;
 
-        // 2. Query usage count since that start date
-        let qUsage = supabase
-          .from("agendamentos")
-          .select("id", { count: "exact", head: true })
-          .ilike("cliente", clientObj.nome)
-          .or(`procedimento.ilike.%dia%,procedimento.ilike.%renova%`);
-        
-        if (startDate) {
-          qUsage = qUsage.gte("data", startDate);
-        }
-        
-        const { count } = await qUsage;
-        const usedSoFar = count ?? 0;
-        // Cycle reset: when usedSoFar fills the limit, next is a new renewal
-        const limite = clientObj.limite_cortes || 0;
-        const dayInCycle = limite > 0 ? usedSoFar % limite : usedSoFar;
-        dayLabel = dayInCycle === 0 ? "RENOVAÇÃO 1° DIA" : `${dayInCycle + 1}° DIA`;
+      // The cycle starts at the LATEST of the last physical renovation or the manual reset date
+      let startDate = dbRenovDate;
+      if (!startDate || (manualResetDate && manualResetDate > startDate)) {
+        startDate = manualResetDate;
       }
 
-      const isRenew = dayLabel === "RENOVAÇÃO 1° DIA";
+      // 2. Query usage count since that start date (Count UNIQUE DAYS)
+      let qUsage = supabase
+        .from("agendamentos")
+        .select("data")
+        .ilike("cliente", clientObj.nome)
+        .neq("cliente", "PAUSA"); 
+      
+      if (startDate) {
+        qUsage = qUsage.gte("data", startDate);
+      }
+      // Count unique days STRICTLY BEFORE the date being scheduled
+      qUsage = qUsage.lt("data", today);
+      
+      const { data: usageData } = await qUsage;
+      const uniqueDays = new Set(usageData?.map(u => u.data)).size;
+      const usedSoFar = uniqueDays;
+      const limite = clientObj.limite_cortes || 0;
+
+      const nextDay = usedSoFar + 1;
+      const isRenew = isRenewalDay || (limite > 0 && usedSoFar >= limite) || nextDay === 1;
+      const dayLabel = isRenew ? "RENOVAÇÃO 1 DIA" : `${nextDay} DIA`;
+      
       setForm(prev => ({
         ...prev,
         client: item.value,
@@ -139,11 +147,10 @@ export const AppointmentForm = memo(function AppointmentForm({
     }
   }, [clients, currentDate]);
 
-  const handleCopySlots = useCallback((period: "manha" | "tarde" | "noite" | "tudo") => {
+  const handleCopySlots = useCallback((period: "manha" | "tarde" | "tudo") => {
     const ranges: Record<string, [number, number]> = {
       manha: [7 * 60, 12 * 60 - 1],
-      tarde: [12 * 60, 18 * 60 - 1],
-      noite: [18 * 60, 21 * 60],
+      tarde: [13 * 60, 20 * 60 + 20],
       tudo:  [0, 24 * 60],
     };
     const [start, end] = ranges[period];
@@ -152,12 +159,24 @@ export const AppointmentForm = memo(function AppointmentForm({
       const min = h * 60 + m;
       return min >= start && min <= end;
     });
-    const label = { manha: "Manhã", tarde: "Tarde", noite: "Noite", tudo: "Tudo" }[period];
-    navigator.clipboard.writeText(
-      `Horários disponíveis (${label}) para ${format(currentDate, "dd/MM")}: ${filtered.map(s => s.time).join(", ")}`
-    );
+
+    const label = { manha: "Manhã", tarde: "Tarde", tudo: "Todos" }[period];
+    const dateFormatted = format(currentDate, "dd/MM/yyyy");
+    
+    let text = `📅 *AGENDA — ${dateFormatted} (${label.toUpperCase()})*\n\n`;
+    const times: string[] = [];
+
+    filtered.forEach(s => {
+      const timeStr = s.time.substring(0, 5);
+      text += `• ${timeStr} - DISPONÍVEL\n`;
+      times.push(timeStr);
+    });
+    
+    navigator.clipboard.writeText(text);
+    
     setShowPeriodPicker(false);
-  }, [freeSlots, currentDate]);
+    if (onCopy) onCopy(label, times);
+  }, [freeSlots, currentDate, onCopy]);
 
   return (
     <div className="space-y-5 py-4">
@@ -196,7 +215,15 @@ export const AppointmentForm = memo(function AppointmentForm({
             <input
               type="date"
               value={form.date || ""}
-              onChange={e => set("date", e.target.value)}
+              onChange={e => {
+                const newDateStr = e.target.value;
+                set("date", newDateStr);
+                if (onDateChange && newDateStr) {
+                  // Ensure correctly parsed date object without time zone issues
+                  const [y, m, d] = newDateStr.split("-").map(Number);
+                  onDateChange(new Date(y, m - 1, d));
+                }
+              }}
               className="w-full bg-surface-subtle border-none rounded-2xl pl-11 pr-4 py-3 text-sm text-text-primary outline-none focus:ring-1 focus:ring-brand-primary font-bold"
               style={{ colorScheme: "dark" }}
             />
@@ -233,12 +260,11 @@ export const AppointmentForm = memo(function AppointmentForm({
                 <Copy size={12} /> Copiar Lista <ChevronDown size={10} className={`transition-transform ${showPeriodPicker ? "rotate-180" : ""}`} />
               </button>
             {showPeriodPicker && (
-              <div className="absolute right-0 top-full mt-2 z-50 bg-surface-section rounded-2xl shadow-2xl shadow-black/50 overflow-hidden min-w-[140px]">
+              <div className="absolute right-0 top-full mt-2 z-50 bg-[#121214] border border-white/[0.05] rounded-2xl shadow-2xl shadow-black/50 overflow-hidden min-w-[140px]">
                 {([
                   { key: "manha", label: "Manhã",  icon: <Sun size={12} /> },
                   { key: "tarde", label: "Tarde",  icon: <Sunset size={12} /> },
-                  { key: "noite", label: "Noite",  icon: <Moon size={12} /> },
-                  { key: "tudo",  label: "Tudo",   icon: <List size={12} /> },
+                  { key: "tudo",  label: "Todos",   icon: <List size={12} /> },
                 ] as const).map(({ key, label, icon }) => (
                   <button
                     key={key}
@@ -293,20 +319,13 @@ export const AppointmentForm = memo(function AppointmentForm({
           placeholder="0.00"
         />
       </div>
-
       {/* Pagamento */}
       <div className="space-y-1">
         <label className="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">Pagamento</label>
-        <select
+        <PaymentSelector
           value={form.paymentMethod || ""}
-          onChange={e => set("paymentMethod", e.target.value)}
-          className="w-full bg-surface-subtle border-none rounded-2xl px-4 py-3 text-sm text-text-primary outline-none focus:ring-1 focus:ring-brand-primary appearance-none cursor-pointer font-bold"
-        >
-          <option value="" disabled>Selecione...</option>
-          {PAYMENT_OPTIONS.map(p => (
-            <option key={p} value={p} className="bg-surface-section">{p}</option>
-          ))}
-        </select>
+          onChange={val => set("paymentMethod", val)}
+        />
       </div>
 
       {/* Observações */}

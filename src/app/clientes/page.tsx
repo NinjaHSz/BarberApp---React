@@ -187,24 +187,24 @@ export default function ClientsPage() {
             <Link 
               key={client.id}
               href={`/clientes/${client.id}`}
-              className="group bg-surface-section/30 hover:bg-surface-section/50 rounded-[2rem] p-6 transition-all duration-500 relative overflow-hidden flex flex-col gap-4 border-none shadow-lg hover:shadow-2xl hover:-translate-y-1"
+              className="group bg-surface-section/30 hover:bg-surface-section/50 rounded-[1.5rem] lg:rounded-[2rem] p-4 lg:p-6 transition-all duration-500 relative overflow-hidden flex flex-col gap-3 lg:gap-4 border-none shadow-lg hover:shadow-2xl hover:-translate-y-1"
             >
               {/* Card content same as before but encapsulated */}
               {client.plano && client.plano !== "Nenhum" && (
-                <div className="absolute top-6 right-6 text-brand-primary">
-                  <Crown size={16} strokeWidth={3} />
+                <div className="absolute top-4 right-4 lg:top-6 lg:right-6 text-brand-primary">
+                  <Crown size={14} className="lg:w-4 lg:h-4 transition-all" strokeWidth={3} />
                 </div>
               )}
               
-              <div className="flex flex-col items-center gap-3 text-center">
-                <div className="w-16 h-16 rounded-[1.5rem] bg-surface-page flex items-center justify-center text-2xl font-black text-brand-primary shadow-xl group-hover:scale-110 transition-transform duration-500">
+              <div className="flex flex-col items-center gap-2 lg:gap-3 text-center">
+                <div className="w-12 h-12 lg:w-16 lg:h-16 rounded-xl lg:rounded-[1.5rem] bg-surface-page flex items-center justify-center text-xl lg:text-2xl font-black text-brand-primary shadow-xl group-hover:scale-110 transition-transform duration-500">
                   {client.nome?.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <h3 className="text-white font-black text-sm uppercase tracking-tight group-hover:text-brand-primary transition-colors leading-tight">
+                  <h3 className="text-white font-black text-xs lg:text-sm uppercase tracking-tight group-hover:text-brand-primary transition-colors leading-tight">
                     {client.nome}
                   </h3>
-                  <p className="text-[10px] text-text-muted font-bold tracking-widest mt-1">
+                  <p className="text-[9px] lg:text-[10px] text-text-muted font-bold tracking-widest mt-1">
                     {client.telefone || "--"}
                   </p>
                 </div>
@@ -253,7 +253,7 @@ export default function ClientsPage() {
           ))}
         </div>
       ) : (
-        <div className="bg-surface-section/30 rounded-[2rem] overflow-hidden shadow-2xl">
+        <div className="bg-surface-section/30 rounded-[1.5rem] lg:rounded-[2rem] overflow-hidden shadow-2xl">
           <div className="hidden md:grid grid-cols-[60px_1fr_180px_150px_150px_120px] gap-4 px-8 py-5 text-[10px] font-black text-text-muted uppercase tracking-[0.2em] bg-white/[0.02]">
             <div>Avatar</div>
             <div>Nome</div>
@@ -267,31 +267,47 @@ export default function ClientsPage() {
               <Link 
                 key={client.id}
                 href={`/clientes/${client.id}`}
-                className="grid grid-cols-1 md:grid-cols-[60px_1fr_180px_150px_150px_120px] gap-4 px-8 py-4 items-center hover:bg-white/[0.02] transition-colors group border-none"
+                className="flex flex-col md:grid md:grid-cols-[60px_1fr_180px_150px_150px_120px] gap-3 md:gap-4 px-4 md:px-8 py-3 md:py-4 items-center hover:bg-white/[0.02] transition-colors group border-none"
               >
-                <div className="w-10 h-10 rounded-xl bg-surface-page flex items-center justify-center text-brand-primary font-black text-sm shadow-lg group-hover:scale-110 transition-transform">
-                  {client.nome?.charAt(0).toUpperCase()}
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                  <div className="w-10 h-10 rounded-xl bg-surface-page flex items-center justify-center text-brand-primary font-black text-sm shadow-lg group-hover:scale-110 transition-transform shrink-0">
+                    {client.nome?.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1 md:hidden">
+                    <h3 className="text-white font-black text-xs uppercase tracking-tight group-hover:text-brand-primary transition-colors truncate">
+                      {client.nome}
+                    </h3>
+                  </div>
+                   {/* Mobile Actions - Removed as requested */}
                 </div>
-                <div className="min-w-0">
+
+                <div className="hidden md:block min-w-0">
                   <h3 className="text-white font-black text-[13px] uppercase tracking-tight group-hover:text-brand-primary transition-colors truncate">
                     {client.nome}
                   </h3>
                 </div>
-                <div className="text-[11px] font-medium text-text-muted truncate italic">
+
+                <div className="hidden md:block w-full md:w-auto text-[10px] md:text-[11px] font-medium text-text-muted truncate italic px-1 md:px-0">
                   {client.observacoes_cliente || <span className="text-white/10">—</span>}
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className={cn(
-                    "px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest",
-                    client.plano !== "Nenhum" ? "bg-brand-primary/10 text-brand-primary" : "bg-white/5 text-white/20"
-                  )}>
-                    {client.plano || "Nenhum"}
-                  </span>
+
+                <div className="flex items-center md:justify-start gap-4 w-full md:w-auto px-1 md:px-0">
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      "px-2 md:px-3 py-0.5 md:py-1 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest",
+                      client.plano !== "Nenhum" ? "bg-brand-primary/10 text-brand-primary" : "bg-white/5 text-white/20"
+                    )}>
+                      {client.plano || "Nenhum"}
+                    </span>
+                  </div>
+                  {/* Join date - Desktop only */}
                 </div>
-                <div className="text-[11px] font-black text-text-muted uppercase tracking-widest">
+
+                <div className="hidden md:block text-[11px] font-black text-text-muted uppercase tracking-widest">
                   {client.created_at ? new Date(client.created_at).getFullYear() : "--"}
                 </div>
-                <div className="flex items-center justify-end gap-2">
+
+                <div className="hidden md:flex items-center justify-end gap-2">
                   <button 
                     onClick={(e) => {
                       e.preventDefault();

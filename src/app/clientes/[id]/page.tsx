@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { InlineInput } from "@/components/shared/inline-input";
 import { InlineAutocomplete } from "@/components/shared/inline-autocomplete";
+import { PaymentSelector } from "@/components/shared/payment-selector";
 
 export default function ClientProfilePage() {
   const { id } = useParams();
@@ -37,12 +38,21 @@ export default function ClientProfilePage() {
   }, [appointments, client]);
 
   const stats = useMemo(() => {
-    const totalSpent = clientAppointments.reduce((acc, a) => acc + (a.value || 0), 0);
-    const lastVisit = clientAppointments[0]?.date ? parseISO(clientAppointments[0].date) : null;
+    const todayStr = format(new Date(), "yyyy-MM-dd");
+    
+    // Filter only records that already happened (up to today)
+    const history = clientAppointments.filter(a => a.date <= todayStr);
+    
+    // Count UNIQUE DAYS for visits
+    const uniqueDays = new Set(history.map(a => a.date)).size;
+    
+    const totalSpent = history.reduce((acc, a) => acc + (a.value || 0), 0);
+    const lastVisit = history[0]?.date ? parseISO(history[0].date) : null;
+    
     return {
       totalSpent,
-      visitCount: clientAppointments.length,
-      ticketMedio: clientAppointments.length ? totalSpent / clientAppointments.length : 0,
+      visitCount: uniqueDays,
+      ticketMedio: uniqueDays ? totalSpent / uniqueDays : 0,
       lastVisit
     };
   }, [clientAppointments]);
@@ -61,7 +71,6 @@ export default function ClientProfilePage() {
       subLabel: p.valor ? `R$ ${p.valor.toFixed(2)}` : undefined 
     })), [procedures]);
 
-  const paymentMethods = ["PIX", "DINHEIRO", "CARTÃO", "PLANO MENSAL", "PLANO SEMESTRAL", "PLANO ANUAL", "CORTESIA"];
 
   // Fetch real usage count from DB
   useEffect(() => {
@@ -76,21 +85,32 @@ export default function ClientProfilePage() {
         .order("data", { ascending: false })
         .limit(1);
 
-      const startDate = latestRenov?.[0]?.data || client.plano_pagamento;
+      const dbRenovDate = latestRenov?.[0]?.data;
+      const manualResetDate = client.plano_pagamento;
 
-      // 2. Count usages from that date forward (only count entries with "DIA", excluding "RENOVAÇÃO")
+      // The cycle starts at the LATEST of the last physical renovation or the manual reset date
+      let startDate = dbRenovDate;
+      if (!startDate || (manualResetDate && manualResetDate > startDate)) {
+        startDate = manualResetDate;
+      }
+
+      const todayStr = format(new Date(), "yyyy-MM-dd");
+
+      // 2. Count UNIQUE DAYS of usage from that date forward (up to TODAY)
       let query = supabase
         .from("agendamentos")
-        .select("id", { count: "exact", head: true })
+        .select("data")
         .ilike("cliente", client.nome)
-        .ilike("procedimento", "%dia%");
+        .neq("cliente", "PAUSA")
+        .lte("data", todayStr);
 
       if (startDate) {
         query = query.gte("data", startDate);
       }
 
-      const { count } = await query;
-      setDbUsage(count ?? 0);
+      const { data: usageData } = await query;
+      const uniqueDays = new Set(usageData?.map(u => u.data)).size;
+      setDbUsage(uniqueDays);
     };
     fetchUsage();
   }, [client, supabase]);
@@ -136,7 +156,7 @@ export default function ClientProfilePage() {
   }
 
   return (
-    <div className="px-4 py-6 sm:px-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-32 max-w-6xl mx-auto">
+    <div className="px-4 py-6 sm:px-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-center gap-6">
         <div className="w-24 h-24 rounded-[2rem] bg-surface-section flex items-center justify-center text-brand-primary text-4xl font-black shadow-2xl shrink-0">
@@ -215,13 +235,11 @@ export default function ClientProfilePage() {
               <div key={i} className="bg-surface-page/50 p-4 rounded-xl space-y-1">
                 <p className="text-[8px] font-black text-text-muted uppercase tracking-widest">{cfg.label}</p>
                 {cfg.options ? (
-                  <select 
+                  <PaymentSelector
                     value={cfg.value || "PIX"}
-                    onChange={(e) => updateMutation.mutate({ preset: { ...client.preset, payment: e.target.value } })}
-                    className="bg-transparent border-none text-[12px] font-black text-white uppercase outline-none w-full appearance-none cursor-pointer"
-                  >
-                    {cfg.options.map(o => <option key={o} value={o} className="bg-surface-section">{o}</option>)}
-                  </select>
+                    onChange={(val) => updateMutation.mutate({ preset: { ...client.preset, payment: val } })}
+                    isCompact
+                  />
                 ) : (
                   <input 
                     type="text"
@@ -318,6 +336,18 @@ export default function ClientProfilePage() {
                 </div>
              </div>
           </div>
+
+          <div className="pt-6 border-t border-white/5">
+            <div className="flex items-center gap-2 mb-2">
+              <Edit3 size={10} className="text-text-muted" />
+              <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Observações do Plano</p>
+            </div>
+            <InlineInput
+              value={client.observacoes_plano || "Adicionar observação específica do plano..."}
+              onSave={(v) => updateMutation.mutate({ observacoes_plano: v })}
+              className="text-xs text-text-muted font-medium italic p-0 hover:text-white transition-all h-auto w-full block"
+            />
+          </div>
         </div>
       )}
 
@@ -359,13 +389,12 @@ export default function ClientProfilePage() {
                         onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { service: v } })}
                         className="text-[12px] font-black text-white uppercase tracking-wide group-hover:text-brand-primary transition-colors h-auto"
                       />
-                      <select 
+                      <PaymentSelector
                         value={appt.paymentMethod || "PIX"}
-                        onChange={(e) => updateAppointmentMutation.mutate({ id: appt.id, updates: { paymentMethod: e.target.value } })}
-                        className="px-2 py-0.5 rounded-lg bg-white/5 text-[8px] font-black text-text-muted uppercase tracking-widest border-none outline-none cursor-pointer hover:text-white transition-all appearance-none"
-                      >
-                        {paymentMethods.map(p => <option key={p} value={p} className="bg-surface-section">{p}</option>)}
-                      </select>
+                        onChange={(val) => updateAppointmentMutation.mutate({ id: appt.id, updates: { paymentMethod: val } })}
+                        isCompact
+                        className="w-[120px]"
+                      />
                     </div>
                     <InlineInput
                       value={appt.observations || ""}

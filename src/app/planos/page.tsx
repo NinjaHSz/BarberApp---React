@@ -54,21 +54,32 @@ export default function PlansPage() {
             .order("data", { ascending: false })
             .limit(1);
 
-          const startDate = latestRenov?.[0]?.data || c.plano_pagamento;
+          const dbRenovDate = latestRenov?.[0]?.data;
+          const manualResetDate = c.plano_pagamento;
 
-          // 2. Count usages from that date forward (only count entries with "DIA", excluding "RENOVAÇÃO")
+          // The cycle starts at the LATEST of the last physical renovation or the manual reset date
+          let startDate = dbRenovDate;
+          if (!startDate || (manualResetDate && manualResetDate > startDate)) {
+            startDate = manualResetDate;
+          }
+
+          const todayStr = format(new Date(), "yyyy-MM-dd");
+
+          // 2. Count UNIQUE DAYS of usage from that date forward (up to TODAY)
           let query = supabase
             .from("agendamentos")
-            .select("id", { count: "exact", head: true })
+            .select("data")
             .ilike("cliente", clientName)
-            .ilike("procedimento", "%dia%");
+            .neq("cliente", "PAUSA")
+            .lte("data", todayStr);
 
           if (startDate) {
             query = query.gte("data", startDate);
           }
 
-          const { count } = await query;
-          map[c.id] = count ?? 0;
+          const { data: usageData } = await query;
+          const uniqueDays = new Set(usageData?.map(u => u.data)).size;
+          map[c.id] = uniqueDays;
         })
       );
       setUsageByClient(map);
@@ -203,20 +214,20 @@ export default function PlansPage() {
           filteredPlans.map((c) => {
             const isPending = c.plano_pagamento && differenceInDays(new Date(), parseISO(c.plano_pagamento)) > 30;
             return (
-              <div key={c.id} className="bg-surface-section/20 p-5 rounded-[2rem] transition-all group flex flex-col lg:flex-row items-center gap-8 border-none hover:bg-surface-section/40">
+              <div key={c.id} className="bg-surface-section/20 p-3 lg:p-5 rounded-[1.5rem] lg:rounded-[2rem] transition-all group flex flex-col lg:flex-row items-center gap-4 lg:gap-8 border-none hover:bg-surface-section/40">
                 {/* User Info */}
-                <div className="flex items-center gap-5 w-full lg:w-72 shrink-0">
-                   <div className="w-12 h-12 rounded-[1.25rem] bg-surface-page flex items-center justify-center text-brand-primary font-black text-lg shadow-2xl">
+                <div className="flex items-center gap-3 lg:gap-5 w-full lg:w-72 shrink-0">
+                   <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-xl lg:rounded-[1.25rem] bg-surface-page flex items-center justify-center text-brand-primary font-black text-base lg:text-lg shadow-2xl">
                       {c.nome?.charAt(0)}
                    </div>
-                   <div className="min-w-0">
-                      <Link href={`/clientes/${c.id}`} className="text-[13px] font-black text-white hover:text-brand-primary block uppercase tracking-tight truncate transition-colors">
+                   <div className="min-w-0 flex-1 lg:flex-none">
+                      <Link href={`/clientes/${c.id}`} className="text-xs lg:text-[13px] font-black text-white hover:text-brand-primary block uppercase tracking-tight truncate transition-colors">
                         {c.nome}
                       </Link>
                       <select 
                         value={c.plano || ""}
                         onChange={(e) => updateMutation.mutate({ id: c.id, data: { plano: e.target.value } })}
-                        className="bg-transparent border-none text-[9px] font-black text-text-muted hover:text-white uppercase tracking-widest p-0 mt-0.5 outline-none cursor-pointer appearance-none"
+                        className="bg-transparent border-none text-[8px] lg:text-[9px] font-black text-text-muted hover:text-white uppercase tracking-widest p-0 mt-0.5 outline-none cursor-pointer appearance-none"
                       >
                          <option value="Mensal" className="bg-surface-section">Plano Mensal</option>
                          <option value="Semestral" className="bg-surface-section">Plano Semestral</option>
@@ -224,58 +235,62 @@ export default function PlansPage() {
                          <option value="Pausado" className="bg-surface-section">Pausado</option>
                       </select>
                    </div>
+                   {/* Mobile Actions - Removed as requested */}
                 </div>
 
-                {/* Usage */}
-                <div className="flex flex-col gap-1.5 w-full lg:w-48 shrink-0">
-                   <div className="flex justify-between items-center text-[10px] font-black uppercase">
-                      <div className="flex items-center gap-1.5">
-                          <span className={cn("text-white", (usageByClient[c.id] ?? 0) >= (c.limite_cortes || Infinity) && "text-rose-400")}>{usageByClient[c.id] ?? 0}</span>
-                         <span className="text-text-muted opacity-30">/</span>
-                         <InlineInput
+                {/* Grid for parameters on mobile - Otimizado para aparecer apenas Uso */}
+                <div className="flex flex-col lg:flex-row items-center gap-4 lg:gap-8 w-full flex-1">
+                  {/* Usage */}
+                  <div className="flex flex-col gap-1 w-full lg:w-48 shrink-0">
+                    <div className="flex justify-between items-center text-[9px] lg:text-[10px] font-black uppercase">
+                        <div className="flex items-center gap-1">
+                            <span className={cn("text-white", (usageByClient[c.id] ?? 0) >= (c.limite_cortes || Infinity) && "text-rose-400")}>{usageByClient[c.id] ?? 0}</span>
+                           <span className="text-text-muted opacity-30">/</span>
+                           <InlineInput
+                            type="number"
+                            value={c.limite_cortes || 0}
+                            onSave={(v) => updateMutation.mutate({ id: c.id, data: { limite_cortes: parseInt(v) } })}
+                            className="text-text-muted p-0 w-6 lg:w-8 h-auto"
+                           />
+                        </div>
+                         <span className={cn("text-[8px] lg:text-[9px] font-bold", (usageByClient[c.id] ?? 0) >= (c.limite_cortes || Infinity) ? "text-rose-400" : "text-text-muted/40")}>{c.limite_cortes > 0 ? Math.min(Math.round(((usageByClient[c.id] ?? 0) / c.limite_cortes) * 100), 100) : 0}%</span>
+                    </div>
+                    <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                        <div className={cn("h-full transition-all duration-700", (usageByClient[c.id] ?? 0) >= (c.limite_cortes || Infinity) ? "bg-rose-500/60" : "bg-brand-primary/40")} style={{ width: `${c.limite_cortes > 0 ? Math.min(Math.round(((usageByClient[c.id] ?? 0) / c.limite_cortes) * 100), 100) : 0}%` }} />
+                    </div>
+                  </div>
+
+                  {/* Ciclo / Pagamento - Desktop Only */}
+                  <div className="hidden lg:flex flex-col w-full lg:w-40 shrink-0">
+                    <p className="text-[7px] lg:text-[8px] font-black text-text-muted uppercase tracking-widest mb-0.5 lg:mb-1.5">Renovação</p>
+                    <input 
+                      type="date"
+                      value={c.plano_pagamento || ""}
+                      onChange={(e) => updateMutation.mutate({ id: c.id, data: { plano_pagamento: e.target.value } })}
+                      className={cn(
+                        "bg-transparent border-none text-[10px] lg:text-[11px] font-black p-0 outline-none cursor-pointer uppercase",
+                        isPending ? "text-rose-500" : "text-white"
+                      )}
+                      style={{ colorScheme: "dark" }}
+                    />
+                  </div>
+
+                  {/* Valor - Desktop Only */}
+                  <div className="hidden lg:flex flex-col w-full lg:w-28 shrink-0">
+                    <p className="text-[7px] lg:text-[8px] font-black text-text-muted uppercase tracking-widest mb-0.5 lg:mb-1.5">Mensalidade</p>
+                    <div className="flex items-center gap-1 font-black text-white text-[11px] lg:text-[12px]">
+                        <InlineInput
                           type="number"
-                          value={c.limite_cortes || 0}
-                          onSave={(v) => updateMutation.mutate({ id: c.id, data: { limite_cortes: parseInt(v) } })}
-                          className="text-text-muted p-0 w-8 h-auto"
-                         />
-                      </div>
-                       <span className={cn("text-[9px] font-bold", (usageByClient[c.id] ?? 0) >= (c.limite_cortes || Infinity) ? "text-rose-400" : "text-text-muted/40")}>{c.limite_cortes > 0 ? Math.min(Math.round(((usageByClient[c.id] ?? 0) / c.limite_cortes) * 100), 100) : 0}%</span>
-                   </div>
-                   <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-                       <div className={cn("h-full transition-all duration-700", (usageByClient[c.id] ?? 0) >= (c.limite_cortes || Infinity) ? "bg-rose-500/60" : "bg-brand-primary/40")} style={{ width: `${c.limite_cortes > 0 ? Math.min(Math.round(((usageByClient[c.id] ?? 0) / c.limite_cortes) * 100), 100) : 0}%` }} />
-                   </div>
+                          prefix="R$"
+                          value={c.valor_plano?.toFixed(2)}
+                          onSave={(v) => updateMutation.mutate({ id: c.id, data: { valor_plano: parseFloat(v) } })}
+                          className="p-0 h-auto font-black"
+                        />
+                    </div>
+                  </div>
                 </div>
 
-                {/* Ciclo / Pagamento */}
-                <div className="flex flex-col w-full lg:w-40 shrink-0">
-                  <p className="text-[8px] font-black text-text-muted uppercase tracking-widest mb-1.5">Renovação</p>
-                  <input 
-                    type="date"
-                    value={c.plano_pagamento || ""}
-                    onChange={(e) => updateMutation.mutate({ id: c.id, data: { plano_pagamento: e.target.value } })}
-                    className={cn(
-                      "bg-transparent border-none text-[11px] font-black p-0 outline-none cursor-pointer uppercase",
-                      isPending ? "text-rose-500" : "text-white"
-                    )}
-                    style={{ colorScheme: "dark" }}
-                  />
-                </div>
-
-                {/* Valor */}
-                <div className="flex flex-col w-full lg:w-28 shrink-0">
-                   <p className="text-[8px] font-black text-text-muted uppercase tracking-widest mb-1.5">Mensalidade</p>
-                   <div className="flex items-center gap-1.5 font-black text-white text-[12px]">
-                      <InlineInput
-                        type="number"
-                        prefix="R$"
-                        value={c.valor_plano?.toFixed(2)}
-                        onSave={(v) => updateMutation.mutate({ id: c.id, data: { valor_plano: parseFloat(v) } })}
-                        className="p-0 h-auto font-black"
-                      />
-                   </div>
-                </div>
-
-                {/* OBS */}
+                {/* OBS - Desktop */}
                 <div className="flex-1 min-w-0 w-full hidden lg:block">
                   <InlineInput
                     value={c.observacoes_plano || "Add observação..."}
@@ -284,8 +299,8 @@ export default function PlansPage() {
                   />
                 </div>
 
-                {/* Ações */}
-                <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-all">
+                {/* Ações - Desktop */}
+                <div className="hidden lg:flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-all">
                    <button onClick={() => handleResetCycle(c)} className="p-3 rounded-2xl bg-white/5 text-text-muted hover:text-brand-primary hover:bg-brand-primary/10 transition-all border-none" title="Reset Ciclo"><RotateCcw size={14} /></button>
                    <button onClick={() => handleToggleStatus(c)} className="p-3 rounded-2xl bg-white/5 text-text-muted hover:text-white transition-all border-none" title={c.plano === "Pausado" ? "Ativar" : "Pausar"}>
                      {c.plano === "Pausado" ? <Play size={14} fill="currentColor" /> : <Pause size={14} fill="currentColor" />}

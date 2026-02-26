@@ -60,12 +60,16 @@
   border-width: 0 !important;
 }
 
+html,
 body {
-  background-color: var(--surface-page);
+  background-color: var(--surface-page) !important;
+  height: 100%;
+  margin: 0;
+}
+
+body {
   color: var(--text-primary);
   font-family: var(--font-sans);
-  min-height: 100vh;
-  margin: 0;
   overflow-x: hidden;
 }
 
@@ -82,7 +86,8 @@ body {
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 4px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;

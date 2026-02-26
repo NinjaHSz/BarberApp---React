@@ -21,8 +21,9 @@ import {
   List,
   ExternalLink,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import React, { useState, useMemo, useCallback, memo, useDeferredValue, useEffect } from "react";
+import React, { useState, useMemo, useCallback, memo, useDeferredValue, useEffect, useRef } from "react";
 import { 
   format, 
   addDays, 
@@ -37,8 +38,10 @@ import { InlineInput } from "@/components/shared/inline-input";
 import { InlineAutocomplete } from "@/components/shared/inline-autocomplete";
 import { Modal } from "@/components/shared/modal";
 import { type Suggestion } from "@/components/shared/autocomplete-input";
+import { PaymentSelector } from "@/components/shared/payment-selector";
 import Link from "next/link";
 import { AppointmentForm } from "./AppointmentForm";
+import { useAgenda } from "@/lib/contexts/agenda-context";
 
 // --- Types ---
 interface Appointment {
@@ -67,7 +70,7 @@ const RecordRow = memo(function RecordRowComponent({
 }: { 
   record: Appointment; 
   onUpdate: (id: string, updates: Partial<Appointment>) => void; 
-  onCancel: (id: string) => void;
+  onCancel: (record: Appointment) => void;
   onAdd: (time: string, date: string) => void;
   onEdit: (record: Appointment) => void;
   clientSuggestions: Suggestion<string>[];
@@ -95,26 +98,36 @@ const RecordRow = memo(function RecordRowComponent({
         .order("data", { ascending: false })
         .limit(1);
 
-      const startDate = latestRenov?.[0]?.data || renewDate;
+      const dbRenovDate = latestRenov?.[0]?.data;
+      const manualResetDate = match.plano_pagamento;
 
-      // 2. Count usage since that dynamic start (only count entries with "DIA", excluding "RENOVAÇÃO")
+      // The cycle starts at the LATEST of the last physical renovation or the manual reset date
+      let startDate = dbRenovDate;
+      if (!startDate || (manualResetDate && manualResetDate > startDate)) {
+        startDate = manualResetDate;
+      }
+
+      // 2. Count UNIQUE DAYS of usage since that dynamic start
       let qUsage = supabase
         .from("agendamentos")
-        .select("id", { count: "exact", head: true })
+        .select("data")
         .ilike("cliente", match.nome)
-        .ilike("procedimento", "%dia%");
+        .neq("cliente", "PAUSA"); 
       
       if (startDate) {
         qUsage = qUsage.gte("data", startDate);
       }
+      // Count only unique days STRICTLY BEFORE the date being scheduled
+      qUsage = qUsage.lt("data", today);
       
-      const { count } = await qUsage;
-      const usedSoFar = count ?? 0;
+      const { data: usageData } = await qUsage;
+      const uniqueDays = new Set(usageData?.map(u => u.data)).size;
+      const usedSoFar = uniqueDays;
       const limite = match.limite_cortes || 0;
-      const dayInCycle = usedSoFar; // Removed modulo if logic is already date-bounded by latestRenov
       
-      const isRenew = isRenewalDay;
-      updates.service = isRenew ? "RENOVAÇÃO" : `${dayInCycle + 1}° DIA`;
+      const nextDay = usedSoFar + 1;
+      const isRenew = isRenewalDay || (limite > 0 && usedSoFar >= limite) || nextDay === 1;
+      updates.service = isRenew ? "RENOVAÇÃO 1 DIA" : `${nextDay} DIA`;
       updates.paymentMethod = isRenew ? "PIX" : "PLANO";
       if (isRenew && match.valor_plano) updates.value = match.valor_plano;
     } else if (match?.preset) {
@@ -128,7 +141,7 @@ const RecordRow = memo(function RecordRowComponent({
   return (
     <>
       <div className={cn(
-        "hidden md:grid md:grid-cols-[80px_1.5fr_1.2fr_1fr_100px_130px_100px] md:gap-4 items-center px-6 py-3 transition-colors group relative border-none focus-within:z-[100] z-[1]",
+        "hidden md:grid md:grid-cols-[80px_1.5fr_1.2fr_1fr_100px_130px_100px] md:gap-4 items-center px-6 py-3 transition-colors group relative border-none focus-within:z-[500] z-[1]",
         isBreak ? "bg-surface-subtle" : "hover:bg-white/[0.02]"
       )}>
         <div className="text-xs font-bold text-text-primary/80">
@@ -209,15 +222,11 @@ const RecordRow = memo(function RecordRowComponent({
             <span className="text-[10px] font-black text-text-muted uppercase">N/A</span>
           ) : (
             <div className={cn("relative", isEmpty && "opacity-0 group-hover:opacity-100")}>
-               <select 
-                 value={record.paymentMethod || ""}
-                 onChange={(e) => onUpdate(record.id, { paymentMethod: e.target.value })}
-                 className="w-full appearance-none px-2 py-0.5 rounded text-[10px] font-black border-none bg-surface-subtle text-text-secondary uppercase cursor-pointer focus:bg-brand-primary/10 transition-all pr-4 outline-none"
-               >
-                 {["PIX", "DINHEIRO", "CARTÃO", "PLANO MENSAL", "PLANO SEMESTRAL", "PLANO ANUAL", "CORTESIA"].map(p => (
-                   <option key={p} value={p} className="bg-[#1c1c1f]">{p}</option>
-                 ))}
-               </select>
+              <PaymentSelector
+                value={record.paymentMethod || ""}
+                onChange={(val) => onUpdate(record.id, { paymentMethod: val })}
+                isCompact
+              />
             </div>
           )}
         </div>
@@ -232,7 +241,7 @@ const RecordRow = memo(function RecordRowComponent({
                 <Edit size={14} />
               </button>
               <button 
-                onClick={() => onCancel(record.id)}
+                onClick={() => onCancel(record)}
                 className="w-8 h-8 rounded-xl bg-white/5 text-rose-500/50 hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center border-none"
               >
                 <Trash2 size={14} />
@@ -262,7 +271,7 @@ const RecordRow = memo(function RecordRowComponent({
                <button onClick={() => onEdit(record)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-subtle text-text-secondary active:scale-90 border-none">
                  <Edit size={18} />
                </button>
-               <button onClick={() => onCancel(record.id)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-subtle text-text-secondary active:scale-90 border-none">
+               <button onClick={() => onCancel(record)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-subtle text-text-secondary active:scale-90 border-none">
                  <Trash2 size={18} />
                </button>
             </div>
@@ -283,7 +292,7 @@ const RecordRow = memo(function RecordRowComponent({
 // --- Main Page ---
 
 export default function AgendaPage() {
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const { selectedDate: currentDate, setSelectedDate: setCurrentDate } = useAgenda();
   const [searchTerm, setSearchTerm] = useState("");
   const deferredSearchTerm = useDeferredValue(searchTerm);
   const [showEmptySlots, setShowEmptySlots] = useState(true);
@@ -291,11 +300,26 @@ export default function AgendaPage() {
   const [copied, setCopied] = useState(false);
   const [copiedSlots, setCopiedSlots] = useState<string[]>([]);
   const [periodFilterName, setPeriodFilterName] = useState("");
+  const [showPeriodPicker, setShowPeriodPicker] = useState(false);
   const [periodFilter, setPeriodFilter] = useState("todos");
   const [showCopyMenu, setShowCopyMenu] = useState(false);
+  const copyMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showCopyMenu) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (copyMenuRef.current && !copyMenuRef.current.contains(e.target as Node)) {
+        setShowCopyMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showCopyMenu]);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<Partial<Appointment> | null>(null);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [recordToCancel, setRecordToCancel] = useState<Appointment | null>(null);
 
   const queryClient = useQueryClient();
   const selectedDateStr = format(currentDate, "yyyy-MM-dd");
@@ -391,9 +415,28 @@ export default function AgendaPage() {
     updateMutation.mutate({ id, updates, dateStr: selectedDateStr });
   }, [updateMutation, selectedDateStr]);
 
-  const handleCancel = useCallback((id: string) => {
-    cancelMutation.mutate({ id });
-  }, [cancelMutation]);
+  const handleCancel = useCallback((record: Appointment) => {
+    setRecordToCancel(record);
+    setIsCancelModalOpen(true);
+  }, []);
+
+  const confirmCancel = () => {
+    if (recordToCancel) {
+      cancelMutation.mutate({ id: recordToCancel.id });
+      setIsCancelModalOpen(false);
+      setRecordToCancel(null);
+
+      // Notificação de Sucesso (Compacta)
+      setPeriodFilterName("Cancelado com Sucesso");
+      setCopiedSlots([`${recordToCancel.time.substring(0, 5)} — ${recordToCancel.client.toUpperCase()}`]);
+      setCopied(true);
+      setTimeout(() => {
+        setCopied(false);
+        setCopiedSlots([]);
+        setPeriodFilterName("");
+      }, 2500);
+    }
+  };
 
   const slots = useMemo(() => {
     if (deferredSearchTerm) {
@@ -448,7 +491,7 @@ export default function AgendaPage() {
   const handleDaySelect = useCallback((day: number) => { setCurrentDate(prev => { const d = new Date(prev); d.setDate(day); return d; }); }, []);
   const handleMonthSelect = useCallback((month: number) => { setCurrentDate(prev => { const d = new Date(prev); d.setMonth(month - 1); return d; }); }, []);
   const handleYearSelect = useCallback((year: number) => { setCurrentDate(prev => { const d = new Date(prev); d.setFullYear(year); return d; }); }, []);
-  
+
   const handleSync = async () => { 
     setIsSyncing(true); 
     await Promise.all([
@@ -512,6 +555,18 @@ export default function AgendaPage() {
       updates: formData, 
       dateStr: selectedDateStr 
     });
+
+    // Notificação de Sucesso
+    const timeLabel = (formData.time || "00:00").substring(0, 5);
+    setPeriodFilterName("Agendado com Sucesso");
+    setCopiedSlots([`${timeLabel} — ${formData.client?.toUpperCase() || "CLIENTE"}`]);
+    setCopied(true);
+    setTimeout(() => {
+      setCopied(false);
+      setCopiedSlots([]);
+      setPeriodFilterName("");
+    }, 2800);
+
     setIsModalOpen(false);
     setEditingRecord(null);
   }, [updateMutation, selectedDateStr]);
@@ -520,7 +575,15 @@ export default function AgendaPage() {
   const daysInMonth = eachDayOfInterval({ start: startOfMonth(currentDate), end: endOfMonth(currentDate) });
   const dayOptions = daysInMonth.map((d: Date) => ({ value: d.getDate(), label: `${format(d, 'EEE', { locale: ptBR }).toUpperCase().slice(0, 3)} ${format(d, 'dd')}` }));
   const monthOptions = [ { value: 1, label: "JAN" }, { value: 2, label: "FEV" }, { value: 3, label: "MAR" }, { value: 4, label: "ABR" }, { value: 5, label: "MAI" }, { value: 6, label: "JUN" }, { value: 7, label: "JUL" }, { value: 8, label: "AGO" }, { value: 9, label: "SET" }, { value: 10, label: "OUT" }, { value: 11, label: "NOV" }, { value: 12, label: "DEZ" } ];
-  const yearOptions = [ { value: 2024, label: "'24" }, { value: 2025, label: "'25" }, { value: 2026, label: "'26" } ];
+  const yearOptions = useMemo(() => {
+    const startYear = 2024;
+    const endYear = new Date().getFullYear() + 2;
+    const options = [];
+    for (let y = startYear; y <= endYear; y++) {
+      options.push({ value: y, label: `'${String(y).slice(-2)}` });
+    }
+    return options;
+  }, []);
   const periodOptions = [
     { value: "manha", label: "Manhã", icon: Sun },
     { value: "tarde", label: "Tarde", icon: CloudSun },
@@ -528,20 +591,30 @@ export default function AgendaPage() {
   ];
 
   return (
-    <div className="px-4 py-8 md:px-8 space-y-6 animate-in fade-in slide-in-from-right-4 duration-500 pb-32 max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div className="flex items-center space-x-2">
-          <div className="flex items-center bg-surface-section rounded-2xl p-0.5">
+    <div className="px-4 py-8 md:px-8 pb-32 space-y-6 animate-in fade-in slide-in-from-right-4 duration-500 max-w-7xl mx-auto min-h-screen">
+      <div className="flex flex-row justify-between items-center gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-center bg-surface-section rounded-2xl p-0.5 shrink-0">
             <button onClick={() => handleDayChange(-1)} className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-white transition-colors border-none"><ChevronLeft size={14} /></button>
             <PremiumSelector value={currentDate.getDate()} options={dayOptions} onSelect={handleDaySelect} className="bg-transparent !px-2 !py-1.5 w-[85px]" />
             <button onClick={() => handleDayChange(1)} className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-white transition-colors border-none"><ChevronRight size={14} /></button>
           </div>
-          <div className="flex items-center bg-surface-section rounded-2xl p-0.5"><PremiumSelector value={currentDate.getMonth() + 1} options={monthOptions} onSelect={handleMonthSelect} className="bg-transparent !px-3 !py-1.5 min-w-[70px]" /></div>
-          <div className="hidden sm:flex items-center bg-surface-section rounded-2xl p-0.5"><PremiumSelector value={currentDate.getFullYear()} options={yearOptions} onSelect={handleYearSelect} className="bg-transparent !px-3 !py-1.5 min-w-[60px]" /></div>
+          <div className="flex items-center bg-surface-section rounded-2xl p-0.5 shrink-0"><PremiumSelector value={currentDate.getMonth() + 1} options={monthOptions} onSelect={handleMonthSelect} className="bg-transparent !px-3 !py-1.5 min-w-[70px]" /></div>
+          <div className="flex items-center bg-surface-section rounded-2xl p-0.5 shrink-0"><PremiumSelector value={currentDate.getFullYear()} options={yearOptions} onSelect={handleYearSelect} className="bg-transparent !px-3 !py-1.5 min-w-[55px]" /></div>
+          
+          <button 
+            onClick={handleSync} 
+            className={cn(
+              "w-9 h-9 rounded-2xl bg-surface-section hover:bg-surface-subtle transition-all flex items-center justify-center border-none shrink-0 ml-0.5", 
+              isSyncing && "animate-spin"
+            )}
+          >
+            <RefreshCw size={14} className="text-text-primary" />
+          </button>
         </div>
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <h1 className="hidden md:block text-sm font-black text-brand-primary italic tracking-tighter opacity-80 uppercase font-display">LUCAS DO CORTE</h1>
-          <button onClick={handleSync} className={cn("w-9 h-9 rounded-2xl bg-surface-section hover:bg-surface-subtle transition-all flex items-center justify-center border-none", isSyncing && "animate-spin")}><RefreshCw size={14} className="text-text-primary" /></button>
+
+        <div className="hidden md:flex items-center gap-3">
+          <h1 className="text-sm font-black text-brand-primary italic tracking-tighter opacity-80 uppercase font-display">LUCAS DO CORTE</h1>
         </div>
       </div>
 
@@ -565,7 +638,10 @@ export default function AgendaPage() {
 
             {/* Menu Dropdown de Período */}
             {showCopyMenu && (
-              <div className="absolute right-0 top-full mt-2 bg-surface-section border border-white/5 rounded-2xl p-2 shadow-2xl z-[120] flex flex-col min-w-[150px] animate-in fade-in zoom-in-95 duration-200">
+              <div 
+                ref={copyMenuRef}
+                className="absolute left-1/2 -translate-x-1/2 top-full mt-2 bg-surface-section border border-white/5 rounded-2xl p-2 shadow-2xl z-[120] flex flex-row gap-1 min-w-max animate-in fade-in zoom-in-95 duration-200"
+              >
                 {periodOptions.map(opt => (
                   <button
                     key={opt.value}
@@ -573,7 +649,7 @@ export default function AgendaPage() {
                       setShowCopyMenu(false);
                       handleCopySchedule(opt.value);
                     }}
-                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold text-text-secondary hover:bg-white/5 hover:text-white transition-all border-none"
+                    className="flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-text-secondary hover:bg-white/5 hover:text-white transition-all border-none"
                   >
                     <opt.icon size={16} className="text-text-muted" />
                     <span>{opt.label}</span>
@@ -583,44 +659,55 @@ export default function AgendaPage() {
             )}
             
             {/* Alerta de Cópia - FIXED BOTTOM (Igual ao Mockup) */}
-            {copied && (
-              <div className="fixed bottom-28 md:bottom-12 left-1/2 -translate-x-1/2 bg-surface-section border border-white/5 rounded-[2rem] p-7 shadow-[0_30px_60px_rgba(0,0,0,0.9)] z-[200] min-w-[340px] max-w-[90vw] animate-in fade-in slide-in-from-bottom-8 duration-500 overflow-hidden">
-                <div className="flex items-center gap-4">
+            <AnimatePresence>
+              {copied && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 100, x: "-50%" }}
+                  animate={{ opacity: 1, y: 0, x: "-50%" }}
+                  exit={{ opacity: 0, y: 100, x: "-50%" }}
+                  transition={{ type: "spring", damping: 25, stiffness: 200, ease: "easeInOut" }}
+                  className="fixed bottom-28 md:bottom-12 left-1/2 bg-surface-section border border-white/5 rounded-[1.5rem] p-5 shadow-[0_30px_60px_rgba(0,0,0,0.9)] z-[999] min-w-[280px] max-w-[90vw] overflow-hidden"
+                >
+                <div className="flex items-center gap-3">
                   {/* Left Icon with Glow */}
                   <div className="relative shrink-0">
-                    <div className="absolute inset-0 bg-white/40 blur-2xl rounded-full" />
-                    <div className="w-14 h-14 rounded-full bg-white flex items-center justify-center text-black relative shadow-[0_0_20px_rgba(255,255,255,0.3)]">
-                      <Check size={28} strokeWidth={4} />
+                    <div className="absolute inset-0 bg-white/20 blur-xl rounded-full" />
+                    <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-black relative shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+                      <Check size={20} strokeWidth={4} />
                     </div>
                   </div>
 
                   {/* Header Text */}
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-text-muted">Sucesso</span>
-                    <h4 className="text-2xl font-black text-white leading-none">{periodFilterName}</h4>
+                    <span className="text-[8px] font-black uppercase tracking-[0.2em] text-text-muted">Sucesso</span>
+                    <h4 className="text-lg font-black text-white leading-tight">{periodFilterName}</h4>
                   </div>
                 </div>
 
                 {/* Hours horizontal list (The Pill) */}
-                <div className="mt-6 bg-[#0c0c0e] rounded-[1.2rem] py-4 px-5 border border-white/5 shadow-inner">
-                   <p className="text-[10px] font-black text-white/70 tracking-[0.15em] text-center whitespace-nowrap overflow-hidden text-ellipsis">
+                <div className="mt-4 bg-[#0c0c0e] rounded-[1rem] py-2.5 px-4 border border-white/5 shadow-inner">
+                   <p className="text-[9px] font-black text-white/70 tracking-[0.1em] text-center whitespace-nowrap overflow-hidden text-ellipsis">
                     {copiedSlots.join(" - ")}
                    </p>
                 </div>
-              </div>
+              </motion.div>
             )}
+            </AnimatePresence>
           </div>
 
           <button onClick={() => setShowEmptySlots(!showEmptySlots)} className={cn("flex items-center justify-center w-12 h-12 md:w-10 md:h-10 rounded-xl border-none bg-surface-section/50 transition-all shrink-0", showEmptySlots ? "text-brand-primary" : "text-text-secondary")}>{showEmptySlots ? <EyeOff size={18} /> : <Eye size={18} />}</button>
-          <div className="relative flex-1 md:w-80"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" size={18} /><input type="text" placeholder="Buscar agendamento..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="bg-surface-section border-none h-12 md:h-10 pl-11 pr-4 rounded-xl text-sm text-text-primary outline-none focus:ring-1 focus:ring-brand-primary w-full" /></div>
-        </div>
+          <div className="relative group flex items-center">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-primary transition-colors z-10" size={16} />
+            <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Pesquisar..." className="bg-surface-section/50 border-none rounded-2xl pl-12 pr-4 py-3 md:py-2 text-sm text-text-primary outline-none focus:ring-1 focus:ring-brand-primary/30 w-full md:w-[220px] font-medium transition-all" />
+          </div>
+      </div>
       </div>
 
-      <div className="space-y-4 md:space-y-0 md:bg-surface-section/30 md:rounded-[2rem] border-none overflow-hidden mt-6">
-        <div className="hidden md:grid md:grid-cols-[80px_1.5fr_1.2fr_1fr_100px_130px_100px] gap-4 bg-white/[0.02] border-none px-6 py-5 text-[10px] font-black text-text-secondary uppercase tracking-widest items-center">
+      <div className="space-y-4 md:space-y-0 md:bg-surface-section/30 md:rounded-[2rem] border-none overflow-visible mt-6 shadow-2xl shadow-black/20">
+        <div className="hidden md:grid md:grid-cols-[80px_1.5fr_1.2fr_1fr_100px_130px_100px] gap-4 bg-white/[0.02] border-none px-6 py-5 text-[10px] font-black text-text-secondary uppercase tracking-widest items-center rounded-t-[2rem]">
           <div>Horário</div><div>Cliente</div><div>Procedimentos</div><div>Observações</div><div>Valor</div><div>Pagamento</div><div className="text-right pr-4">Ações</div>
         </div>
-        <div className="space-y-1 md:space-y-0 md:divide-y md:divide-white/[0.02]">
+        <div className="space-y-1 md:space-y-0 md:divide-y md:divide-white/[0.02] md:[&>*:last-child>div:first-child]:rounded-b-[2rem]">
           {isLoading ? ( 
             <div className="p-12 text-center text-text-muted animate-pulse uppercase text-[10px] font-black tracking-widest italic">Carregando agendamentos...</div> 
           ) : slots.length === 0 ? ( 
@@ -660,8 +747,54 @@ export default function AgendaPage() {
             currentDate={currentDate}
             clients={clients || []}
             onSave={handleSaveModal}
+            onDateChange={setCurrentDate}
+            onCopy={(label, times) => {
+              setPeriodFilterName(label);
+              setCopiedSlots(times);
+              setCopied(true);
+              setTimeout(() => {
+                setCopied(false);
+                setCopiedSlots([]);
+                setPeriodFilterName("");
+              }, 2500);
+            }}
           />
         )}
+      </Modal>
+
+      <Modal
+        isOpen={isCancelModalOpen}
+        onClose={() => setIsCancelModalOpen(false)}
+        title="Cancelar Horário"
+        subtitle="Confirma o cancelamento?"
+        icon={<Trash2 size={18} className="text-rose-500" />}
+        className="max-w-md"
+      >
+        <div className="space-y-4">
+          <div className="bg-rose-500/5 p-5 rounded-[1.2rem] border border-rose-500/10 text-center">
+            <h4 className="text-lg font-black text-white uppercase italic">
+              {recordToCancel?.time.substring(0, 5)} — {recordToCancel?.client.toUpperCase()}
+            </h4>
+            <p className="text-[10px] font-bold text-text-muted mt-2 leading-tight">
+              Esta ação é permanente. Deseja prosseguir?
+            </p>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => setIsCancelModalOpen(false)}
+              className="flex-1 bg-surface-section text-white font-black py-3 rounded-xl border-none uppercase tracking-widest text-[10px] hover:bg-surface-subtle transition-all"
+            >
+              Manter
+            </button>
+            <button
+              onClick={confirmCancel}
+              className="flex-1 bg-rose-500 text-white font-black py-3 rounded-xl border-none uppercase tracking-widest text-[10px] shadow-lg shadow-rose-500/10 hover:brightness-110 transition-all active:scale-[0.98]"
+            >
+              Confirmar
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
