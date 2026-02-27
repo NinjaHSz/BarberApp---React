@@ -35,6 +35,19 @@ export function JarvisAssistant() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     let shouldBeRunning = true;
 
+    // Force permission prompt via MediaDevices API (More reliable for triggering the popup)
+    const requestPermission = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Close stream immediately, we just wanted the permission
+        stream.getTracks().forEach(track => track.stop());
+        return true;
+      } catch (e) {
+        console.error("Microphone permission denied", e);
+        return false;
+      }
+    };
+
     if (SpeechRecognition && !recognitionRef.current) {
       setIsSupported(true);
       const recognition = new SpeechRecognition();
@@ -53,7 +66,6 @@ export function JarvisAssistant() {
             }
           } else {
             interimTranscript += event.results[i][0].transcript.toLowerCase();
-            // Faster detection even before phrase ends
             if (interimTranscript.includes("jarvis") && statusRef.current === "idle") {
               startCommandSession();
             }
@@ -71,23 +83,19 @@ export function JarvisAssistant() {
       };
 
       recognition.onend = () => {
-        // Restart only if it should be running and was stopped naturally
         if (shouldBeRunning) {
-          try {
-            recognition.start();
-          } catch (e) {
-            // Ignore if already started
-          }
+          try { recognition.start(); } catch (e) {}
         }
       };
 
       recognitionRef.current = recognition;
       
-      try {
-        recognition.start();
-      } catch (e) {
-        console.error("Failed to start recognition", e);
-      }
+      // Try to start, if fails, wait for manual click
+      requestPermission().then(granted => {
+        if (granted) {
+          try { recognition.start(); } catch (e) {}
+        }
+      });
     }
 
     return () => {
@@ -143,10 +151,34 @@ export function JarvisAssistant() {
     // Support for other commands can be added here
   };
 
+  const startRecognition = useCallback(() => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.start();
+        setIsActive(false);
+        setStatus("idle");
+      } catch (e) {
+        console.error("Already running or failed to start", e);
+      }
+    }
+  }, []);
+
+  const handleManualToggle = () => {
+    if (!isSupported) return;
+    
+    // Voice Feedback (Simple)
+    const utterance = new SpeechSynthesisUtterance("Jarvis online.");
+    utterance.lang = "pt-BR";
+    window.speechSynthesis.speak(utterance);
+    
+    startRecognition();
+  };
+
   const handleAgendaCommand = (text: string) => {
-    // Attempt to extract client name
+    // Attempt to extract client name - Improved search
+    const normalizedText = text.toLowerCase();
     const client = clients.find(c => 
-      text.toLowerCase().includes(c.nome.toLowerCase())
+      normalizedText.includes(c.nome.toLowerCase())
     );
 
     // Attempt to extract time (regex for 00:00 or 00h00)
@@ -219,14 +251,18 @@ export function JarvisAssistant() {
         </div>
       </div>
       {/* Debug Indicator - Always visible but discrete */}
-      <div className="fixed bottom-4 left-4 z-[9999] opacity-20 hover:opacity-100 transition-opacity">
+      <button 
+        onClick={handleManualToggle}
+        className="fixed bottom-4 left-4 z-[9999] opacity-20 hover:opacity-100 transition-opacity border-none bg-transparent p-0 cursor-pointer"
+        title="Ativar Jarvis Manualmente"
+      >
         <div className={cn(
-          "w-6 h-6 rounded-full flex items-center justify-center transition-colors",
-          isSupported ? "bg-brand-primary/10 text-brand-primary" : "bg-rose-500/10 text-rose-500"
+          "w-8 h-8 rounded-full flex items-center justify-center transition-colors shadow-lg",
+          isSupported ? "bg-brand-primary/20 text-brand-primary" : "bg-rose-500/20 text-rose-500"
         )}>
-           <Mic size={10} className={cn(statusRef.current === "listening" && "animate-pulse")} />
+           <Mic size={14} className={cn(statusRef.current === "listening" && "animate-pulse")} />
         </div>
-      </div>
+      </button>
     </>
   );
 }
