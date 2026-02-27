@@ -154,7 +154,12 @@ export function JarvisAssistant() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      const options = { mimeType: 'audio/webm;codecs=opus' };
+      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+        options.mimeType = 'audio/webm';
+      }
+
+      const mediaRecorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
       
@@ -163,20 +168,24 @@ export function JarvisAssistant() {
       };
       
       mediaRecorder.onstop = async () => {
-         if (audioChunksRef.current.length === 0) return;
+         if (audioChunksRef.current.length === 0) {
+           setIsProcessing(false);
+           stateRef.current.isProcessing = false;
+           return;
+         }
          
          setIsProcessing(true);
          stateRef.current.isProcessing = true;
          setTranscript("Traduzindo voz com Whisper (Groq)...");
          
-         const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+         const audioBlob = new Blob(audioChunksRef.current, { type: options.mimeType });
          const formData = new FormData();
          formData.append("file", audioBlob, "audio.webm");
          
          try {
            setIsActive(true);
            const res = await fetch("/api/jarvis/transcribe", { method: "POST", body: formData });
-           if (!res.ok) throw new Error("Erro na API de Transcrição Whisper");
+           if (!res.ok) throw new Error(`Status ${res.status}`);
            
            const data = await res.json();
            const text = data.text?.trim() || "";
@@ -187,23 +196,22 @@ export function JarvisAssistant() {
              return;
            }
            
-           // Sucesso: passa a bola pro ChatGPT pensar o que significa a frase limpa
-           processCommand(text);
+           await processCommand(text);
 
-         } catch (err) {
-           console.error(err);
-           const utterance = new SpeechSynthesisUtterance("O ouvido do Whisper falhou.");
+         } catch (err: any) {
+           console.error("Transcription error:", err);
+           const utterance = new SpeechSynthesisUtterance("O ouvido do Whisper falhou devido a um erro de rede ou processamento.");
            utterance.lang = "pt-BR";
            utterance.onend = () => { setIsProcessing(false); setIsActive(false); stateRef.current.isProcessing = false; setTranscript(""); };
            window.speechSynthesis.speak(utterance);
          }
       };
       
-      mediaRecorder.start(500); // 500ms timeslice para acumular as chunks sem travar o blob
+      mediaRecorder.start(1000); // Coleta a cada 1 segundo
       isRecordingRef.current = true;
       setIsListening(true);
       setError(null);
-      setTranscript("🎧 Gravando... (Comece a falar)");
+      setTranscript("🎧 Gravando... (Aguardando fala)");
       
       const audioContext = new AudioContext();
       audioContextRef.current = audioContext;
@@ -221,18 +229,19 @@ export function JarvisAssistant() {
         const sum = dataArray.reduce((acc, val) => acc + val, 0);
         const avg = sum / bufferLength;
         
-        // Se a voz for perceptível (cálculo de limiar super sensível)
-        if (avg > 3) { 
+        // Se houver voz significativa
+        if (avg > 5) { 
+           // Enquanto fala, resetamos a paciência para 3 segundos de silêncio
            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-           // Cancela gravação ao ter 2.5 segundos cravados de puro silêncio
-           silenceTimerRef.current = setTimeout(() => { stopRecording(); }, 2500); 
+           silenceTimerRef.current = setTimeout(() => { stopRecording(); }, 3000); 
+           if (transcript === "🎧 Gravando... (Aguardando fala)") setTranscript("🎧 Gravando... (Ouvindo)");
         }
         
         requestAnimationFrame(detectSilence);
       };
       
-      // Auto cancel timer if completely silent for 7 segundos (Dando tempo pra ele pensar)
-      silenceTimerRef.current = setTimeout(() => { stopRecording(); }, 7000); 
+      // Se ficar em silêncio absoluto por 8 segundos desde o início, desliga pra poupar recursos
+      silenceTimerRef.current = setTimeout(() => { stopRecording(); }, 8000); 
       detectSilence();
       
     } catch (err) {
