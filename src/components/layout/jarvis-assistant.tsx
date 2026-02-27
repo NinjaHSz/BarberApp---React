@@ -22,13 +22,20 @@ export function JarvisAssistant() {
   const [status, setStatus] = useState<"idle" | "listening" | "processing">("idle");
   
   const recognitionRef = useRef<any>(null);
+  const statusRef = useRef<"idle" | "listening" | "processing">("idle");
   const { data: clients = [] } = useClients();
 
-  // Initialize Speech Recognition
+  // Keep statusRef in sync with state for callbacks
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  // Initialize Speech Recognition ONCE
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let shouldBeRunning = true;
 
-    if (SpeechRecognition) {
+    if (SpeechRecognition && !recognitionRef.current) {
       setIsSupported(true);
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
@@ -37,39 +44,55 @@ export function JarvisAssistant() {
 
       recognition.onresult = (event: any) => {
         const transcript = Array.from(event.results)
-          .map((result: any) => result[0])
-          .map((result) => result.transcript)
+          .map((result: any) => (result as any)[0].transcript)
           .join("")
           .toLowerCase();
 
         setLastTranscript(transcript);
 
-        // Logic for Wake Word "Jarvis"
-        if (transcript.includes("jarvis") && status === "idle") {
+        // Logic for Wake Word "Jarvis" - Use statusRef to avoid effect re-run
+        if (transcript.includes("jarvis") && statusRef.current === "idle") {
           startCommandSession();
         }
       };
 
       recognition.onerror = (event: any) => {
+        if (event.error === "aborted") return;
         console.error("Speech recognition error", event.error);
-        if (event.error === "not-allowed") setStatus("idle");
+        if (event.error === "not-allowed") {
+           shouldBeRunning = false;
+           setStatus("idle");
+        }
       };
 
       recognition.onend = () => {
-        // Restart if it stops naturally to keep it "always on"
-        if (isSupported) recognition.start();
+        // Restart only if it should be running and was stopped naturally
+        if (shouldBeRunning) {
+          try {
+            recognition.start();
+          } catch (e) {
+            // Ignore if already started
+          }
+        }
       };
 
       recognitionRef.current = recognition;
-      recognition.start();
+      
+      try {
+        recognition.start();
+      } catch (e) {
+        console.error("Failed to start recognition", e);
+      }
     }
 
     return () => {
+      shouldBeRunning = false;
       if (recognitionRef.current) {
         recognitionRef.current.stop();
+        recognitionRef.current = null;
       }
     };
-  }, [isSupported, status]);
+  }, []); // Run only once on mount
 
   const startCommandSession = () => {
     setStatus("listening");
