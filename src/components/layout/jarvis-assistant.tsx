@@ -77,6 +77,21 @@ export function JarvisAssistant() {
         }
 
         const finalClientName = clientObj?.nome || (!isClientNull ? data.clientName : "");
+        
+        // NOVO: Verifica se o nome está vazio e avisa o usuário
+        if (!finalClientName || finalClientName.trim() === "") {
+          const utterance = new SpeechSynthesisUtterance("Não consegui identificar para qual cliente devo agendar. Poderia repetir o nome?");
+          utterance.lang = "pt-BR";
+          utterance.onend = () => {
+            setIsProcessing(false);
+            setIsActive(false);
+            stateRef.current.isProcessing = false;
+            setTranscript("");
+          };
+          window.speechSynthesis.speak(utterance);
+          return;
+        }
+
         const isTimeNull = !data.time || data.time === "null" || data.time === null;
         const finalTime = !isTimeNull ? data.time : "08:00";
         const isDateNull = !data.date || data.date === "null" || data.date === null;
@@ -88,7 +103,7 @@ export function JarvisAssistant() {
         
         window.dispatchEvent(customEvent);
         
-        const msgName = clientObj ? clientObj.nome : (!isClientNull ? data.clientName : "você");
+        const msgName = clientObj ? clientObj.nome : data.clientName;
         
         const spokenTime = data.spokenTime || finalTime;
         const spokenDate = data.spokenDate ? ` ${data.spokenDate}` : ""; 
@@ -250,13 +265,32 @@ export function JarvisAssistant() {
     }
   }, [processCommand, stopRecording]);
 
-  const toggleRecording = () => {
+  const toggleRecording = useCallback(() => {
     if (isListening) {
       stopRecording(); // Parada manual (Push-to-stop)
     } else {
       startRecording();
     }
-  };
+  }, [isListening, startRecording, stopRecording]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignorar se o usuário estiver digitando em campos de texto
+      const activeEl = document.activeElement;
+      const isInput = 
+        activeEl instanceof HTMLInputElement || 
+        activeEl instanceof HTMLTextAreaElement ||
+        (activeEl as HTMLElement)?.isContentEditable;
+
+      if (e.code === "Space" && !isInput) {
+        e.preventDefault(); // Impede o scroll da página ao apertar espaço
+        toggleRecording();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [toggleRecording]);
 
   return (
     <>
