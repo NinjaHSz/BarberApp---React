@@ -43,16 +43,21 @@ export function JarvisAssistant() {
       recognition.lang = "pt-BR";
 
       recognition.onresult = (event: any) => {
-        const transcript = Array.from(event.results)
-          .map((result: any) => (result as any)[0].transcript)
-          .join("")
-          .toLowerCase();
-
-        setLastTranscript(transcript);
-
-        // Logic for Wake Word "Jarvis" - Use statusRef to avoid effect re-run
-        if (transcript.includes("jarvis") && statusRef.current === "idle") {
-          startCommandSession();
+        let interimTranscript = "";
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            const finalTranscript = event.results[i][0].transcript.toLowerCase();
+            setLastTranscript(finalTranscript);
+            if (finalTranscript.includes("jarvis") && statusRef.current === "idle") {
+              startCommandSession();
+            }
+          } else {
+            interimTranscript += event.results[i][0].transcript.toLowerCase();
+            // Faster detection even before phrase ends
+            if (interimTranscript.includes("jarvis") && statusRef.current === "idle") {
+              startCommandSession();
+            }
+          }
         }
       };
 
@@ -211,6 +216,15 @@ export function JarvisAssistant() {
               {lastTranscript || "Ouvindo..."}
             </span>
           </div>
+        </div>
+      </div>
+      {/* Debug Indicator - Always visible but discrete */}
+      <div className="fixed bottom-4 left-4 z-[9999] opacity-20 hover:opacity-100 transition-opacity">
+        <div className={cn(
+          "w-6 h-6 rounded-full flex items-center justify-center transition-colors",
+          isSupported ? "bg-brand-primary/10 text-brand-primary" : "bg-rose-500/10 text-rose-500"
+        )}>
+           <Mic size={10} className={cn(statusRef.current === "listening" && "animate-pulse")} />
         </div>
       </div>
     </>
