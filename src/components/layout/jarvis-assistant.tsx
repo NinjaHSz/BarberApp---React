@@ -1,13 +1,12 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { format, addDays, parse } from "date-fns";
+import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useClients } from "@/hooks/use-data";
 import { cn } from "@/lib/utils";
-import { Mic, MicOff, Sparkles } from "lucide-react";
+import { Mic, Sparkles, AlertCircle } from "lucide-react";
 
-// Extend Window interface for SpeechRecognition
 declare global {
   interface Window {
     SpeechRecognition: any;
@@ -16,252 +15,278 @@ declare global {
 }
 
 export function JarvisAssistant() {
-  const [isSupported, setIsSupported] = useState(false);
-  const [isActive, setIsActive] = useState(false); // Jarvis is actively listening for a command
-  const [lastTranscript, setLastTranscript] = useState("");
-  const [status, setStatus] = useState<"idle" | "listening" | "processing">("idle");
+  const [isListening, setIsListening] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [isActive, setIsActive] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
-  const recognitionRef = useRef<any>(null);
-  const statusRef = useRef<"idle" | "listening" | "processing">("idle");
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isRecordingRef = useRef(false);
+
   const { data: clients = [] } = useClients();
+  
+  const stateRef = useRef({ isActive: false, isProcessing: false });
+  const clientsRef = useRef(clients);
 
-  // Keep statusRef in sync with state for callbacks
   useEffect(() => {
-    statusRef.current = status;
-  }, [status]);
+    stateRef.current = { isActive, isProcessing };
+    clientsRef.current = clients;
+  }, [isActive, isProcessing, clients]);
 
-  // Initialize Speech Recognition ONCE
-  useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    let shouldBeRunning = true;
+  const processCommand = useCallback(async (text: string) => {
+    const normalized = text.toLowerCase().trim();
+    if (!normalized) return;
 
-    // Force permission prompt via MediaDevices API (More reliable for triggering the popup)
-    const requestPermission = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        // Close stream immediately, we just wanted the permission
-        stream.getTracks().forEach(track => track.stop());
-        return true;
-      } catch (e) {
-        console.error("Microphone permission denied", e);
-        return false;
-      }
-    };
-
-    if (SpeechRecognition && !recognitionRef.current) {
-      setIsSupported(true);
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = "pt-BR";
-
-      recognition.onresult = (event: any) => {
-        let interimTranscript = "";
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            const finalTranscript = event.results[i][0].transcript.toLowerCase();
-            setLastTranscript(finalTranscript);
-            if (finalTranscript.includes("jarvis") && statusRef.current === "idle") {
-              startCommandSession();
-            }
-          } else {
-            interimTranscript += event.results[i][0].transcript.toLowerCase();
-            if (interimTranscript.includes("jarvis") && statusRef.current === "idle") {
-              startCommandSession();
-            }
-          }
-        }
-      };
-
-      recognition.onerror = (event: any) => {
-        if (event.error === "aborted") return;
-        console.error("Speech recognition error", event.error);
-        if (event.error === "not-allowed") {
-           shouldBeRunning = false;
-           setStatus("idle");
-        }
-      };
-
-      recognition.onend = () => {
-        if (shouldBeRunning) {
-          try { recognition.start(); } catch (e) {}
-        }
-      };
-
-      recognitionRef.current = recognition;
-      
-      // Try to start, if fails, wait for manual click
-      requestPermission().then(granted => {
-        if (granted) {
-          try { recognition.start(); } catch (e) {}
-        }
-      });
-    }
-
-    return () => {
-      shouldBeRunning = false;
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-        recognitionRef.current = null;
-      }
-    };
-  }, []); // Run only once on mount
-
-  const startCommandSession = () => {
-    setStatus("listening");
+    // Apenas passamos o comando, sem restrições de wakeWord agora que o botão é explícito
+    setIsProcessing(true);
+    stateRef.current.isProcessing = true;
+    setTranscript(`Processando com IA: "${text}"`);
     setIsActive(true);
-    
-    // Play a subtle sound or feedback could go here
-    
-    // Auto-timeout for the command if nothing is heard
-    setTimeout(() => {
-      finishCommandSession();
-    }, 8000);
-  };
 
-  const finishCommandSession = () => {
-    setStatus("idle");
-    setIsActive(false);
-    setLastTranscript("");
-  };
+    try {
+      const res = await fetch("/api/jarvis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          command: normalized,
+          currentDate: format(new Date(), "yyyy-MM-dd (EEEE)", { locale: ptBR })
+        })
+      });
 
-  // Process the transcript when Jarvis is active
-  useEffect(() => {
-    if (status === "listening" && lastTranscript) {
-      // Find the text AFTER the word "jarvis"
-      const parts = lastTranscript.split("jarvis");
-      const command = parts[parts.length - 1].trim();
+      if (!res.ok) throw new Error("Erro de comunicação com o Cérebro");
 
-      if (command.length > 5) {
-        processCommand(command);
+      const data = await res.json();
+      console.log("Jarvis Processamento IA: ", data);
+
+      if (data.intent === "agendar") {
+        const isClientNull = !data.clientName || data.clientName === "null" || data.clientName === null;
+        let clientObj = null;
+
+        if (!isClientNull) {
+           const iaName = String(data.clientName).toLowerCase();
+           
+           clientObj = clientsRef.current.find(c => {
+               const dbName = c.nome.toLowerCase();
+               return dbName === iaName || dbName.includes(iaName) || iaName.includes(dbName);
+           });
+        }
+
+        const finalClientName = clientObj?.nome || (!isClientNull ? data.clientName : "");
+        const isTimeNull = !data.time || data.time === "null" || data.time === null;
+        const finalTime = !isTimeNull ? data.time : "08:00";
+        const isDateNull = !data.date || data.date === "null" || data.date === null;
+        const finalDate = !isDateNull ? data.date : format(new Date(), "yyyy-MM-dd");
+
+        const customEvent = new CustomEvent("jarvis-action", {
+            detail: { type: "AGENDA_OPEN", payload: { clientName: finalClientName, time: finalTime, date: finalDate } }
+        });
+        
+        window.dispatchEvent(customEvent);
+        
+        const msgName = clientObj ? clientObj.nome : (!isClientNull ? data.clientName : "você");
+        
+        const spokenTime = data.spokenTime || finalTime;
+        const spokenDate = data.spokenDate ? ` ${data.spokenDate}` : ""; 
+        
+        const utterance = new SpeechSynthesisUtterance(`${msgName} agendado para as ${spokenTime}${spokenDate}.`);
+        utterance.lang = "pt-BR";
+        utterance.onend = () => {
+          setIsProcessing(false);
+          setIsActive(false);
+          stateRef.current.isProcessing = false;
+          setTranscript("");
+        };
+        window.speechSynthesis.speak(utterance);
+      } else {
+         const utterance = new SpeechSynthesisUtterance("Não entendi uma intenção de agendamento clara.");
+         utterance.lang = "pt-BR";
+         utterance.onend = () => {
+           setIsProcessing(false);
+           setIsActive(false);
+           stateRef.current.isProcessing = false;
+           setTranscript("");
+         };
+         window.speechSynthesis.speak(utterance);
       }
-    }
-  }, [lastTranscript, status]);
 
-  const processCommand = (text: string) => {
-    console.log("Processing Jarvis Command:", text);
-
-    // SIMPLE PARSING LOGIC - Can be improved with a more robust parser
-    
-    // 1. Action: Agendar
-    if (text.includes("agendar") || text.includes("marcar")) {
-      handleAgendaCommand(text);
-    }
-    
-    // Support for other commands can be added here
-  };
-
-  const startRecognition = useCallback(() => {
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.start();
-        setIsActive(false);
-        setStatus("idle");
-      } catch (e) {
-        console.error("Already running or failed to start", e);
-      }
+    } catch (err) {
+      console.error(err);
+      const utterance = new SpeechSynthesisUtterance("Estou sem conexão com a Inteligência.");
+      utterance.lang = "pt-BR";
+      utterance.onend = () => {
+         setIsProcessing(false);
+         setIsActive(false);
+         stateRef.current.isProcessing = false;
+         setTranscript("");
+      };
+      window.speechSynthesis.speak(utterance);
     }
   }, []);
 
-  const handleManualToggle = () => {
-    if (!isSupported) return;
+  const stopRecording = useCallback(() => {
+    if (!isRecordingRef.current) return;
+    isRecordingRef.current = false;
+    setIsListening(false);
     
-    // Voice Feedback (Simple)
-    const utterance = new SpeechSynthesisUtterance("Jarvis online.");
-    utterance.lang = "pt-BR";
-    window.speechSynthesis.speak(utterance);
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     
-    startRecognition();
-  };
-
-  const handleAgendaCommand = (text: string) => {
-    // Attempt to extract client name - Improved search
-    const normalizedText = text.toLowerCase();
-    const client = clients.find(c => 
-      normalizedText.includes(c.nome.toLowerCase())
-    );
-
-    // Attempt to extract time (regex for 00:00 or 00h00)
-    const timeMatch = text.match(/(\d{1,2})[:h](\d{2})/) || text.match(/às (\d{1,2})/);
-    let time = "";
-    if (timeMatch) {
-      const h = timeMatch[1].padStart(2, '0');
-      const m = timeMatch[2] || "00";
-      time = `${h}:${m}`;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
     }
-
-    // Attempt to extract date
-    let date = new Date();
-    if (text.includes("amanhã")) {
-      date = addDays(date, 1);
+    
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
     }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+    }
+  }, []);
 
-    console.log("Jarvis Parsed:", { client: client?.nome, time, date: format(date, "yyyy-MM-dd") });
-
-    if (client || time) {
-      // DISPATCH CUSTOM EVENT TO APP
-      const event = new CustomEvent("jarvis-action", {
-        detail: {
-          type: "AGENDA_OPEN",
-          payload: {
-            clientName: client?.nome || "",
-            time: time || "08:00",
-            date: format(date, "yyyy-MM-dd")
-          }
-        }
-      });
-      window.dispatchEvent(event);
-      finishCommandSession();
+  const startRecording = useCallback(async () => {
+    if (isRecordingRef.current || stateRef.current.isProcessing) return;
+    
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
       
-      // Voice Feedback (Simple)
-      const utterance = new SpeechSynthesisUtterance("Com certeza. Abrindo agendamento.");
-      utterance.lang = "pt-BR";
-      window.speechSynthesis.speak(utterance);
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+      
+      mediaRecorder.onstop = async () => {
+         if (audioChunksRef.current.length === 0) return;
+         
+         setIsProcessing(true);
+         stateRef.current.isProcessing = true;
+         setTranscript("Traduzindo voz com Whisper (Groq)...");
+         
+         const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+         const formData = new FormData();
+         formData.append("file", audioBlob, "audio.webm");
+         
+         try {
+           setIsActive(true);
+           const res = await fetch("/api/jarvis/transcribe", { method: "POST", body: formData });
+           if (!res.ok) throw new Error("Erro na API de Transcrição Whisper");
+           
+           const data = await res.json();
+           const text = data.text?.trim() || "";
+           
+           if (!text) {
+             setTranscript("Não ouvi som inteligível.");
+             setTimeout(() => { setIsProcessing(false); setIsActive(false); stateRef.current.isProcessing = false; setTranscript(""); }, 3000);
+             return;
+           }
+           
+           // Sucesso: passa a bola pro ChatGPT pensar o que significa a frase limpa
+           processCommand(text);
+
+         } catch (err) {
+           console.error(err);
+           const utterance = new SpeechSynthesisUtterance("O ouvido do Whisper falhou.");
+           utterance.lang = "pt-BR";
+           utterance.onend = () => { setIsProcessing(false); setIsActive(false); stateRef.current.isProcessing = false; setTranscript(""); };
+           window.speechSynthesis.speak(utterance);
+         }
+      };
+      
+      mediaRecorder.start(500); // 500ms timeslice para acumular as chunks sem travar o blob
+      isRecordingRef.current = true;
+      setIsListening(true);
+      setError(null);
+      setTranscript("🎧 Gravando... (Comece a falar)");
+      
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+      const analyser = audioContext.createAnalyser();
+      const microphone = audioContext.createMediaStreamSource(stream);
+      microphone.connect(analyser);
+      
+      analyser.fftSize = 256;
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      
+      const detectSilence = () => {
+        if (!isRecordingRef.current) return;
+        analyser.getByteFrequencyData(dataArray);
+        const sum = dataArray.reduce((acc, val) => acc + val, 0);
+        const avg = sum / bufferLength;
+        
+        // Se a voz for perceptível (cálculo de limiar super sensível)
+        if (avg > 3) { 
+           if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+           // Cancela gravação ao ter 2.5 segundos cravados de puro silêncio
+           silenceTimerRef.current = setTimeout(() => { stopRecording(); }, 2500); 
+        }
+        
+        requestAnimationFrame(detectSilence);
+      };
+      
+      // Auto cancel timer if completely silent for 7 segundos (Dando tempo pra ele pensar)
+      silenceTimerRef.current = setTimeout(() => { stopRecording(); }, 7000); 
+      detectSilence();
+      
+    } catch (err) {
+       console.error("Mic error:", err);
+       setError("Microfone Bloqueado");
+    }
+  }, [processCommand, stopRecording]);
+
+  const toggleRecording = () => {
+    if (isListening) {
+      stopRecording(); // Parada manual (Push-to-stop)
+    } else {
+      startRecording();
     }
   };
-
-  if (!isSupported) return null;
 
   return (
     <>
-      {/* Visual Feedback: Border Glow */}
-      <div 
-        className={cn(
-          "fixed inset-0 pointer-events-none z-[9999] transition-all duration-1000 border-[0px]",
-          isActive ? "border-brand-primary/30 shadow-[inset_0_0_100px_rgba(212,212,216,0.2)] border-[8px]" : "border-transparent"
-        )}
-      />
-
-      {/* Subtle Floating Indicator (Optional) */}
       <div className={cn(
-        "fixed bottom-24 right-8 z-[9999] transition-all duration-500",
-        isActive ? "scale-100 opacity-100" : "scale-50 opacity-0 pointer-events-none"
+        "fixed inset-0 pointer-events-none z-[9999] transition-all duration-700 border-[0px]",
+        (isActive || isProcessing) ? "border-brand-primary/40 shadow-[inset_0_0_150px_rgba(212,212,216,0.25)] border-[12px]" : "border-transparent"
+      )} />
+
+      {/* Balão de Mensagem */}
+      <div className={cn(
+        "fixed bottom-24 left-1/2 -translate-x-1/2 z-[9999] transition-all duration-300 pointer-events-none w-full max-w-sm px-4",
+        (isActive || isProcessing || error || transcript) ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
       )}>
-        <div className="bg-surface-section border border-brand-primary/20 p-4 rounded-full shadow-2xl flex items-center gap-3 animate-pulse">
-          <div className="relative">
-             <div className="absolute inset-0 bg-brand-primary/20 blur-xl rounded-full" />
-             <Sparkles className="text-brand-primary relative" size={24} />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[10px] font-black uppercase text-brand-primary tracking-[0.2em]">Jarvis</span>
-            <span className="text-[12px] font-bold text-white leading-none italic max-w-[150px] truncate">
-              {lastTranscript || "Ouvindo..."}
+        <div className="bg-surface-section/95 border border-white/10 backdrop-blur-2xl px-6 py-4 rounded-3xl text-white shadow-2xl flex items-center gap-4 justify-center">
+          {error ? <AlertCircle className="text-rose-500" size={20} /> : <Sparkles className="text-brand-primary animate-pulse" size={20} />}
+          <div className="flex flex-col text-center min-w-[200px]">
+            <span className="font-bold text-sm tracking-tight capitalize break-words">
+                {error || transcript || "Jarvis ouvindo..."}
             </span>
           </div>
         </div>
       </div>
-      {/* Debug Indicator - Always visible but discrete */}
+
       <button 
-        onClick={handleManualToggle}
-        className="fixed bottom-4 left-4 z-[9999] opacity-20 hover:opacity-100 transition-opacity border-none bg-transparent p-0 cursor-pointer"
-        title="Ativar Jarvis Manualmente"
+        onClick={toggleRecording} 
+        className={cn(
+          "flex items-center h-12 px-0 group-hover/sidebar:px-4 transition-all duration-200 relative w-full",
+          isListening ? "bg-surface-subtle text-white" : "text-text-secondary hover:bg-white/5 hover:text-white"
+        )}
       >
-        <div className={cn(
-          "w-8 h-8 rounded-full flex items-center justify-center transition-colors shadow-lg",
-          isSupported ? "bg-brand-primary/20 text-brand-primary" : "bg-rose-500/20 text-rose-500"
-        )}>
-           <Mic size={14} className={cn(statusRef.current === "listening" && "animate-pulse")} />
+        <div className="w-20 shrink-0 flex items-center justify-center">
+           <Mic size={20} className={cn(isListening && "text-brand-primary animate-pulse")} />
         </div>
+        <span className="opacity-0 group-hover/sidebar:opacity-100 transition-opacity text-xs font-bold uppercase tracking-wider whitespace-nowrap">
+          Jarvis AI
+        </span>
+        {isListening && (
+          <div className="absolute left-0 w-1 h-6 bg-brand-primary rounded-r-full group-hover/sidebar:h-8 transition-all" />
+        )}
       </button>
     </>
   );

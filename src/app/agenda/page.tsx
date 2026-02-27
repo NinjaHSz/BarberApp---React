@@ -322,33 +322,7 @@ export default function AgendaPage() {
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [recordToCancel, setRecordToCancel] = useState<Appointment | null>(null);
 
-  // Jarvis Integration
-  useEffect(() => {
-    const handleJarvis = (e: any) => {
-      const { type, payload } = e.detail;
-      if (type === "AGENDA_OPEN") {
-        const { clientName, time, date } = payload;
-        
-        // Change dashboard date if needed
-        if (date !== format(currentDate, "yyyy-MM-dd")) {
-          setCurrentDate(parse(date, "yyyy-MM-dd", new Date()));
-        }
-
-        setEditingRecord({
-          time,
-          date,
-          client: clientName || "",
-          service: "A DEFINIR",
-          paymentMethod: "PIX",
-          value: 0
-        });
-        setIsModalOpen(true);
-      }
-    };
-
-    window.addEventListener("jarvis-action", handleJarvis);
-    return () => window.removeEventListener("jarvis-action", handleJarvis);
-  }, [currentDate, setCurrentDate]);
+  // O ouvinte do Jarvis foi movido para depois das Mutations para evitar problemas de escopo.
 
   const queryClient = useQueryClient();
   const selectedDateStr = format(currentDate, "yyyy-MM-dd");
@@ -439,6 +413,59 @@ export default function AgendaPage() {
       console.error('[AGENDA] cancelMutation ERRO:', error);
     }
   });
+
+  // Jarvis Integration (Agora abaixo das Mutations para ter acesso sem erros)
+  useEffect(() => {
+    const handleJarvis = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (!customEvent.detail) return;
+      
+      const { type, payload } = customEvent.detail;
+      if (type === "AGENDA_OPEN") {
+        const { clientName, time, date } = payload;
+        
+        if (date !== format(currentDate, "yyyy-MM-dd")) {
+          setCurrentDate(parse(date, "yyyy-MM-dd", new Date()));
+        }
+
+        const formData = {
+          time,
+          date,
+          client: clientName || "",
+          service: "A DEFINIR",
+          paymentMethod: "A DEFINIR",
+          value: 0,
+          observations: "Agendado via IA"
+        };
+
+        // Se a IA encontrou pelo menos um cliente válido e um horário válido, salva direto no banco!
+        if (clientName && time) {
+           updateMutation.mutate({
+             id: `empty-${time}`,
+             updates: formData,
+             dateStr: date
+           });
+
+           // Dá a notificação de SUCESSO na tela de forma silenciosa e legal
+           setPeriodFilterName("Assistente IA");
+           setCopiedSlots([`${time} — ${clientName.toUpperCase()}`]);
+           setCopied(true);
+           setTimeout(() => {
+             setCopied(false);
+             setCopiedSlots([]);
+             setPeriodFilterName("");
+           }, 3000);
+        } else {
+           // Se faltou dado crasso, joga pro modal pra ele olhar com os olhos humanos
+           setEditingRecord(formData);
+           setIsModalOpen(true);
+        }
+      }
+    };
+
+    window.addEventListener("jarvis-action", handleJarvis);
+    return () => window.removeEventListener("jarvis-action", handleJarvis);
+  }, [currentDate, setCurrentDate, updateMutation]);
 
   const handleUpdate = useCallback((id: string, updates: Partial<Appointment>) => {
     updateMutation.mutate({ id, updates, dateStr: selectedDateStr });

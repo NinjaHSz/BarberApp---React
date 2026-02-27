@@ -12,6 +12,7 @@ import {
   Settings 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { JarvisAssistant } from "@/components/layout/jarvis-assistant";
 
 const navItems = [
   { href: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -78,6 +79,11 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      {/* Jarvis Integrated Button */}
+      <div className="mt-auto shrink-0 pb-6">
+        <JarvisAssistant />
+      </div>
     </aside>
   );
 }
