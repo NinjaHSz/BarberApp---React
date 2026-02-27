@@ -31,6 +31,7 @@ import {
   startOfMonth, 
   endOfMonth, 
   eachDayOfInterval,
+  parse,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { PremiumSelector } from "@/components/shared/premium-selector";
@@ -320,6 +321,34 @@ export default function AgendaPage() {
   const [editingRecord, setEditingRecord] = useState<Partial<Appointment> | null>(null);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [recordToCancel, setRecordToCancel] = useState<Appointment | null>(null);
+
+  // Jarvis Integration
+  useEffect(() => {
+    const handleJarvis = (e: any) => {
+      const { type, payload } = e.detail;
+      if (type === "AGENDA_OPEN") {
+        const { clientName, time, date } = payload;
+        
+        // Change dashboard date if needed
+        if (date !== format(currentDate, "yyyy-MM-dd")) {
+          setCurrentDate(parse(date, "yyyy-MM-dd", new Date()));
+        }
+
+        setEditingRecord({
+          time,
+          date,
+          client: clientName || "",
+          service: "A DEFINIR",
+          paymentMethod: "PIX",
+          value: 0
+        });
+        setIsModalOpen(true);
+      }
+    };
+
+    window.addEventListener("jarvis-action", handleJarvis);
+    return () => window.removeEventListener("jarvis-action", handleJarvis);
+  }, [currentDate, setCurrentDate]);
 
   const queryClient = useQueryClient();
   const selectedDateStr = format(currentDate, "yyyy-MM-dd");

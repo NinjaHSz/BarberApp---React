@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "@/lib/providers";
 import { Sidebar } from "@/components/layout/sidebar";
 import { MobileDock } from "@/components/layout/mobile-dock";
+import { JarvisAssistant } from "@/components/layout/jarvis-assistant";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -47,6 +48,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-surface-page flex h-screen w-full overflow-hidden`}
       >
         <Providers>
+          <JarvisAssistant />
           <Sidebar />
           <main className="flex-1 h-full overflow-auto custom-scroll relative">
             {children}
