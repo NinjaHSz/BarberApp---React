@@ -82,7 +82,7 @@ export function Sidebar() {
 
       {/* Jarvis Integrated Button */}
       <div className="mt-auto shrink-0 pb-6">
-        <JarvisAssistant />
+        <JarvisAssistant sidebarOnly />
       </div>
     </aside>
   );

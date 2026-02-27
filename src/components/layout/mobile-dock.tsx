@@ -25,8 +25,8 @@ export function MobileDock() {
   const pathname = usePathname();
 
   return (
-    <div className="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-[400px]">
-      <div className="bg-surface-section/80 backdrop-blur-2xl px-4 py-3 rounded-[2rem] flex items-center justify-around shadow-[0_8px_32px_rgba(0,0,0,0.5)] border border-white/5 relative overflow-hidden">
+    <div className="md:hidden fixed bottom-6 left-0 right-0 z-[100] px-4 flex justify-center">
+      <div className="bg-surface-section/80 backdrop-blur-3xl px-6 py-3 rounded-[2.5rem] flex items-center justify-between w-full max-w-md shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/5 relative overflow-hidden">
         {/* Glow effect */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-px bg-gradient-to-r from-transparent via-brand-primary/20 to-transparent" />
         
@@ -37,15 +37,15 @@ export function MobileDock() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex flex-col items-center gap-1 transition-all duration-300 relative py-1 px-3 rounded-2xl",
-                isActive ? "text-white" : "text-text-muted hover:text-text-secondary"
+                "flex flex-col items-center gap-1 transition-all duration-300 relative py-1",
+                isActive ? "text-white" : "text-text-muted"
               )}
             >
               <div className={cn(
-                "w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-300",
-                isActive ? "bg-brand-primary/10 scale-110" : "bg-transparent"
+                "w-12 h-12 flex items-center justify-center rounded-2xl transition-all duration-300",
+                isActive ? "bg-brand-primary/10 scale-110" : "bg-transparent hover:bg-white/5"
               )}>
-                <item.icon size={20} className={cn(isActive && "text-brand-primary")} />
+                <item.icon size={22} className={cn(isActive && "text-brand-primary")} />
               </div>
               {isActive && (
                 <div className="absolute -bottom-1 w-1 h-1 bg-brand-primary rounded-full animate-in fade-in zoom-in duration-300" />

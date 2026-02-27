@@ -7,7 +7,7 @@ interface InlineInputProps {
   value: string | number;
   onSave: (value: string) => void;
   className?: string;
-  type?: "text" | "number" | "time";
+  type?: "text" | "number" | "time" | "date";
   placeholder?: string;
   prefix?: string;
 }
@@ -47,7 +47,7 @@ export const InlineInput = memo(function InlineInputComponent({
 
   const hasValue = value !== undefined && value !== null && value !== "";
 
-  if (!isEditing && type !== "time") {
+  if (!isEditing && type !== "time" && type !== "date") {
     return (
       <div
         onClick={() => setIsEditing(true)}

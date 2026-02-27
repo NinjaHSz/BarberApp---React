@@ -18,6 +18,7 @@ import {
   Check,
   Sun,
   CloudSun,
+  RotateCcw,
   List,
   ExternalLink,
 } from "lucide-react";
@@ -301,6 +302,7 @@ export default function AgendaPage() {
   const [copied, setCopied] = useState(false);
   const [copiedSlots, setCopiedSlots] = useState<string[]>([]);
   const [periodFilterName, setPeriodFilterName] = useState("");
+  const [lastAction, setLastAction] = useState<{ type: string, data: any } | null>(null);
   const [showPeriodPicker, setShowPeriodPicker] = useState(false);
   const [periodFilter, setPeriodFilter] = useState("todos");
   const [showCopyMenu, setShowCopyMenu] = useState(false);
@@ -375,7 +377,7 @@ export default function AgendaPage() {
       if (updates.time !== undefined) dbUpdates.horario = updates.time;
 
       if (id.startsWith('empty-')) {
-        const { error } = await supabase.from('agendamentos').insert({
+        const { data, error } = await supabase.from('agendamentos').insert({
           cliente: updates.client || "---",
           procedimento: updates.service || "A DEFINIR",
           valor: updates.value || 0,
@@ -383,15 +385,23 @@ export default function AgendaPage() {
           observacoes: updates.observations || "",
           data: dateStr,
           horario: updates.time || id.replace('empty-', '')
-        });
+        }).select().single();
         if (error) throw error;
+        return data; // Retorna o registro criado com o ID real
       } else {
         const { error } = await supabase.from('agendamentos').update(dbUpdates).eq('id', id);
         if (error) throw error;
+        return null;
       }
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (data, variables) => {
       console.log('[AGENDA] updateMutation onSuccess, refetching:', variables.dateStr);
+      
+      // Se foi uma inserção (agendamento novo), salvamos o ID real para o Rebobinar
+      if (variables.id.startsWith('empty-') && data?.id) {
+        setLastAction({ type: "agendar", data: { id: data.id, time: data.horario, client: data.cliente } });
+      }
+      
       queryClient.refetchQueries({ queryKey: ["records", variables.dateStr] });
     },
     onError: (error) => {
@@ -414,60 +424,163 @@ export default function AgendaPage() {
     }
   });
 
-  // Jarvis Integration (Agora abaixo das Mutations para ter acesso sem erros)
+  // Ref para garantir que o listener do Jarvis tenha acesso aos records mais recentes sem re-registrar
+  const recordsRef = useRef<Appointment[]>(records);
+  useEffect(() => {
+    recordsRef.current = records;
+  }, [records]);
+
+  // Ref para desduplicação de comandos Jarvis (evita duplicidade em sistemas com múltiplos listeners)
+  const lastProcessedRef = useRef<{ id: string, time: number } | null>(null);
+
+  // Jarvis Integration
   useEffect(() => {
     const handleJarvis = (e: Event) => {
       const customEvent = e as CustomEvent;
       if (!customEvent.detail) return;
       
       const { type, payload } = customEvent.detail;
+      
+      // Deduplicação: Ignorar se o mesmo comando (mesmo cliente e hora) foi processado nos últimos 1000ms
+      const commandId = `${payload.clientName}-${payload.time}-${payload.date}`;
+      const now = Date.now();
+      if (lastProcessedRef.current && lastProcessedRef.current.id === commandId && (now - lastProcessedRef.current.time) < 1000) {
+        console.log("[JARVIS] Ignorando comando duplicado:", commandId);
+        return;
+      }
+      lastProcessedRef.current = { id: commandId, time: now };
+
+      console.log(`[JARVIS ACTION] ${type}`, payload);
+
+      const markSuccess = (title: string, slots: string[]) => {
+        setPeriodFilterName(title);
+        setCopiedSlots(slots);
+        setCopied(true);
+        setTimeout(() => { 
+          setCopied(false);
+          setLastAction(null);
+        }, 3000);
+      };
+
+      // Intent: AGENDAR (Agora processado apenas via AGENDA_OPEN vindo do Assistant global)
       if (type === "AGENDA_OPEN") {
         const { clientName, time, date } = payload;
+        const targetDate = date || format(currentDate, "yyyy-MM-dd");
         
-        if (date !== format(currentDate, "yyyy-MM-dd")) {
-          setCurrentDate(parse(date, "yyyy-MM-dd", new Date()));
+        if (targetDate !== format(currentDate, "yyyy-MM-dd")) {
+          setCurrentDate(parse(targetDate, "yyyy-MM-dd", new Date()));
         }
 
         const formData = {
-          time,
-          date,
+          time: time || "08:00",
+          date: targetDate,
           client: clientName || "",
           service: "A DEFINIR",
-          paymentMethod: "A DEFINIR",
+          paymentMethod: "PIX",
           value: 0,
-          observations: "Agendado via IA"
+          observations: "Agendado via Jarvis"
         };
 
-        // Se a IA encontrou pelo menos um cliente válido e um horário válido, salva direto no banco!
         if (clientName && time) {
-           updateMutation.mutate({
-             id: `empty-${time}`,
-             updates: formData,
-             dateStr: date
-           });
-
-           // Dá a notificação de SUCESSO na tela de forma silenciosa e legal
-           setPeriodFilterName("Assistente IA");
-           setCopiedSlots([`${time} — ${clientName.toUpperCase()}`]);
-           setCopied(true);
-           setTimeout(() => {
-             setCopied(false);
-             setCopiedSlots([]);
-             setPeriodFilterName("");
-           }, 3000);
+           console.log("[JARVIS] Executando inserção direta:", formData);
+           // Não setamos lastAction aqui, deixamos o onSuccess da mutation capturar o ID real
+           updateMutation.mutate({ id: `empty-${time}`, updates: formData, dateStr: targetDate });
+           markSuccess("Agenda Criada", [`${time} — ${clientName.toUpperCase()}`]);
         } else {
-           // Se faltou dado crasso, joga pro modal pra ele olhar com os olhos humanos
+           console.log("[JARVIS] Dados insuficientes para salvar direto, abrindo modal.");
            setEditingRecord(formData);
            setIsModalOpen(true);
+        }
+      }
+
+      // Intent: EDITAR / DELETAR
+      if (type === "JARVIS_CHAT_COMMAND") {
+        const { intent, clientName, id, updates } = payload;
+        if (intent !== "editar" && intent !== "deletar") return;
+
+        let targetId = id;
+        if (!targetId && clientName) {
+          const searchName = clientName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          const match = recordsRef.current.find((r: Appointment) => {
+            const rName = r.client.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            return rName.includes(searchName) || searchName.includes(rName);
+          });
+          if (match) targetId = match.id;
+        }
+
+        if (intent === "deletar" && targetId) {
+          const match = recordsRef.current.find(r => r.id === targetId);
+          if (match) {
+            setLastAction({ type: "cancelar", data: match });
+            cancelMutation.mutate({ id: targetId });
+            markSuccess("Cancelado", [`${match.time} — ${match.client.toUpperCase()}`]);
+          }
+        } else if (intent === "editar" && targetId && updates) {
+          const match = recordsRef.current.find(r => r.id === targetId);
+          if (match) {
+             setLastAction({ type: "editar", data: { ...match } });
+             const cleanUpdates: Partial<Appointment> = {};
+             if (updates.time) cleanUpdates.time = updates.time;
+             if (updates.clientName) cleanUpdates.client = updates.clientName;
+             if (updates.service) cleanUpdates.service = updates.service;
+             updateMutation.mutate({ id: targetId, updates: cleanUpdates, dateStr: selectedDateStr });
+             markSuccess("Editado", [`${match.time} → ${updates.time || match.time}`]);
+          }
+        } else if ((intent === "editar" || intent === "deletar") && !targetId) {
+          console.warn("[JARVIS] Registro não encontrado para ação:", clientName);
+          setPeriodFilterName("Não encontrado");
+          setCopiedSlots([clientName?.toUpperCase() || "CLIENTE"]);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 3000);
         }
       }
     };
 
     window.addEventListener("jarvis-action", handleJarvis);
-    return () => window.removeEventListener("jarvis-action", handleJarvis);
-  }, [currentDate, setCurrentDate, updateMutation]);
+    window.addEventListener("jarvis-undo", handleUndo);
+    return () => {
+      window.removeEventListener("jarvis-action", handleJarvis);
+      window.removeEventListener("jarvis-undo", handleUndo);
+    };
+  }, [supabase, queryClient, cancelMutation, updateMutation, lastAction, currentDate, selectedDateStr]);
+
+  const handleUndo = async () => {
+    if (!lastAction) return;
+
+    if (lastAction.type === "agendar") {
+       // Mira de Precisão: Deletar exatamente o ID que foi criado
+       if (lastAction.data.id) {
+         await supabase.from('agendamentos').delete().eq('id', lastAction.data.id);
+       }
+    } else if (lastAction.type === "cancelar" || lastAction.type === "editar") {
+       const data = lastAction.data;
+       const dbRecord: any = {
+         cliente: data.client,
+         procedimento: data.service,
+         valor: data.value,
+         forma_pagamento: data.paymentMethod,
+         observacoes: data.observations,
+         data: data.date,
+         horario: data.time
+       };
+
+       if (lastAction.type === "cancelar") {
+         await supabase.from('agendamentos').insert([dbRecord]);
+       } else {
+         await supabase.from('agendamentos').update(dbRecord).eq('id', data.id);
+       }
+    }
+
+    queryClient.invalidateQueries({ queryKey: ["records"] });
+    setLastAction(null);
+    setCopied(false);
+  };
 
   const handleUpdate = useCallback((id: string, updates: Partial<Appointment>) => {
+    const match = recordsRef.current.find(r => r.id === id);
+    if (match) {
+      setLastAction({ type: "editar", data: { ...match } });
+    }
     updateMutation.mutate({ id, updates, dateStr: selectedDateStr });
   }, [updateMutation, selectedDateStr]);
 
@@ -478,19 +591,24 @@ export default function AgendaPage() {
 
   const confirmCancel = () => {
     if (recordToCancel) {
+      setLastAction({ type: "cancelar", data: { ...recordToCancel } });
       cancelMutation.mutate({ id: recordToCancel.id });
       setIsCancelModalOpen(false);
-      setRecordToCancel(null);
-
+      
       // Notificação de Sucesso (Compacta)
       setPeriodFilterName("Cancelado com Sucesso");
       setCopiedSlots([`${recordToCancel.time.substring(0, 5)} — ${recordToCancel.client.toUpperCase()}`]);
       setCopied(true);
+      
+      // Resetar após 3s (tempo da barra de progresso)
       setTimeout(() => {
         setCopied(false);
+        setLastAction(null);
         setCopiedSlots([]);
         setPeriodFilterName("");
-      }, 2500);
+      }, 3000);
+      
+      setRecordToCancel(null);
     }
   };
 
@@ -738,6 +856,15 @@ export default function AgendaPage() {
                     <span className="text-[8px] font-black uppercase tracking-[0.2em] text-text-muted">Sucesso</span>
                     <h4 className="text-lg font-black text-white leading-tight">{periodFilterName}</h4>
                   </div>
+
+                  {lastAction && (
+                    <button 
+                      onClick={handleUndo}
+                      className="ml-auto bg-brand-primary text-black h-10 px-4 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-widest hover:scale-105 active:scale-95 transition-all border-none"
+                    >
+                      <RotateCcw size={14} strokeWidth={3} /> Rebobinar
+                    </button>
+                  )}
                 </div>
 
                 {/* Hours horizontal list (The Pill) */}
@@ -745,6 +872,16 @@ export default function AgendaPage() {
                    <p className="text-[9px] font-black text-white/70 tracking-[0.1em] text-center whitespace-nowrap overflow-hidden text-ellipsis">
                     {copiedSlots.join(" - ")}
                    </p>
+                </div>
+
+                {/* Progress Bar (Contagem Regressiva) */}
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/5">
+                  <motion.div 
+                    initial={{ width: "100%" }}
+                    animate={{ width: "0%" }}
+                    transition={{ duration: 3, ease: "linear" }}
+                    className="h-full bg-brand-primary"
+                  />
                 </div>
               </motion.div>
             )}

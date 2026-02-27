@@ -1,11 +1,12 @@
 "use client";
 
 import { useExpenses, useSupabase, useCards } from "@/hooks/use-data";
-import { Plus, Search, Filter, Trash2, Edit2, RotateCcw, XCircle, Calendar, CreditCard, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState, useMemo } from "react";
-import { format, parseISO, startOfWeek, endOfWeek, isWithinInterval, startOfMonth, endOfMonth } from "date-fns";
+import { motion, AnimatePresence } from "framer-motion";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { format, parseISO, startOfWeek, endOfWeek, isWithinInterval, startOfMonth, endOfMonth, addDays, subDays, eachDayOfInterval } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { Plus, Search, Filter, Trash2, Edit2, RotateCcw, XCircle, Calendar, CreditCard, DollarSign, Check, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { PremiumSelector } from "@/components/shared/premium-selector";
 import { useAgenda } from "@/lib/contexts/agenda-context";
 import { Modal } from "@/components/shared/modal";
@@ -25,65 +26,49 @@ export default function ExpensesPage() {
   const [sortField, setSortField] = useState("vencimento_asc");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<any>(null);
+  const [copied, setCopied] = useState(false);
+  const [copiedSlots, setCopiedSlots] = useState<string[]>([]);
+  const [periodFilterName, setPeriodFilterName] = useState("");
+  const [lastAction, setLastAction] = useState<{ type: string, data: any } | null>(null);
 
-  const { selectedDate } = useAgenda();
+  const { selectedDate, setSelectedDate } = useAgenda();
+  const [isSyncing, setIsSyncing] = useState(false);
 
-  const filteredExpenses = useMemo(() => {
-    let result = [...expenses];
+  const handleDayChange = useCallback((delta: number) => {
+    setSelectedDate(prev => delta > 0 ? addDays(prev, delta) : subDays(prev, Math.abs(delta)));
+  }, [setSelectedDate]);
 
-    // Period Filter
-    if (periodFilter === "diario") {
-      const todayStr = format(selectedDate, "yyyy-MM-dd");
-      result = result.filter(e => e.vencimento === todayStr);
-    } else if (periodFilter === "semanal") {
-      const start = startOfWeek(selectedDate);
-      const end = endOfWeek(selectedDate);
-      result = result.filter(e => {
-        const d = parseISO(e.vencimento);
-        return isWithinInterval(d, { start, end });
-      });
-    } else if (periodFilter === "mensal") {
-      const start = startOfMonth(selectedDate);
-      const end = endOfMonth(selectedDate);
-      result = result.filter(e => {
-        const d = parseISO(e.vencimento);
-        return isWithinInterval(d, { start, end });
-      });
+  const handleDaySelect = useCallback((day: number) => { 
+    setSelectedDate(prev => { const d = new Date(prev); d.setDate(day); return d; }); 
+  }, [setSelectedDate]);
+
+  const handleMonthSelect = useCallback((month: number) => { 
+    setSelectedDate(prev => { const d = new Date(prev); d.setMonth(month - 1); return d; }); 
+  }, [setSelectedDate]);
+
+  const handleYearSelect = useCallback((year: number) => { 
+    setSelectedDate(prev => { const d = new Date(prev); d.setFullYear(year); return d; }); 
+  }, [setSelectedDate]);
+
+  const handleSync = async () => { 
+    setIsSyncing(true); 
+    await queryClient.invalidateQueries({ queryKey: ["expenses"] });
+    await new Promise(r => setTimeout(r, 800)); 
+    setIsSyncing(false); 
+  };
+
+  const daysInMonth = eachDayOfInterval({ start: startOfMonth(selectedDate), end: endOfMonth(selectedDate) });
+  const dayOptions = daysInMonth.map((d: Date) => ({ value: d.getDate(), label: `${format(d, 'EEE', { locale: ptBR }).toUpperCase().slice(0, 3)} ${format(d, 'dd')}` }));
+  const monthOptions = [ { value: 1, label: "JAN" }, { value: 2, label: "FEV" }, { value: 3, label: "MAR" }, { value: 4, label: "ABR" }, { value: 5, label: "MAI" }, { value: 6, label: "JUN" }, { value: 7, label: "JUL" }, { value: 8, label: "AGO" }, { value: 9, label: "SET" }, { value: 10, label: "OUT" }, { value: 11, label: "NOV" }, { value: 12, label: "DEZ" } ];
+  const yearOptions = useMemo(() => {
+    const startYear = 2024;
+    const endYear = new Date().getFullYear() + 2;
+    const options = [];
+    for (let y = startYear; y <= endYear; y++) {
+      options.push({ value: y, label: `'${String(y).slice(-2)}` });
     }
-
-    // Search Filter
-    if (searchTerm) {
-      const s = searchTerm.toLowerCase();
-      result = result.filter(e => 
-        e.descricao?.toLowerCase().includes(s) || 
-        e.cartao?.toLowerCase().includes(s)
-      );
-    }
-
-    // Status Filter
-    if (statusFilter !== "TODOS") {
-      const isPaid = statusFilter === "PAGO";
-      result = result.filter(e => e.paga === isPaid);
-    }
-
-    // Sorting
-    result.sort((a, b) => {
-      if (sortField === "vencimento_asc") return a.vencimento.localeCompare(b.vencimento);
-      if (sortField === "vencimento_desc") return b.vencimento.localeCompare(a.vencimento);
-      if (sortField === "valor_asc") return (a.valor || 0) - (b.valor || 0);
-      if (sortField === "valor_desc") return (b.valor || 0) - (a.valor || 0);
-      if (sortField === "descricao_asc") return (a.descricao || "").localeCompare(b.descricao || "");
-      return 0;
-    });
-
-    return result;
-  }, [expenses, periodFilter, searchTerm, statusFilter, sortField]);
-
-  const stats = useMemo(() => {
-    const paid = filteredExpenses.filter(e => e.paga).reduce((acc, e) => acc + (e.valor || 0), 0);
-    const pending = filteredExpenses.filter(e => !e.paga).reduce((acc, e) => acc + (e.valor || 0), 0);
-    return { paid, pending, total: paid + pending };
-  }, [filteredExpenses]);
+    return options;
+  }, []);
 
   // Mutations
   const updateMutation = useMutation({
@@ -119,6 +104,178 @@ export default function ExpensesPage() {
     },
   });
 
+  // Jarvis Integration - MOVED HERE to avoid reference errors
+  const expensesRef = useRef(expenses);
+  useEffect(() => { expensesRef.current = expenses; }, [expenses]);
+
+  useEffect(() => {
+    const handleJarvis = async (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (!customEvent.detail) return;
+      
+      const { type, payload } = customEvent.detail;
+      if (type !== "JARVIS_CHAT_COMMAND") return;
+
+      const { intent, clientName, id, updates, action, sourceMonth, targetMonth, targetTable } = payload;
+
+      // Só processa se for para a tabela de saídas
+      if (targetTable && targetTable !== "saidas") return;
+
+      // 1. AÇÃO EM MASSA (Bulk Action) - Mover mês
+      if (intent === "bulk_action" && action === "mover_mes") {
+        const sMonth = Number(sourceMonth);
+        const tMonth = Number(targetMonth);
+        
+        const year = new Date().getFullYear();
+        const toUpdate = expensesRef.current.filter(e => {
+          const d = parseISO(e.vencimento);
+          return d.getMonth() + 1 === sMonth && d.getFullYear() === year;
+        });
+
+        if (toUpdate.length === 0) return;
+
+        // SALVAR PARA DESFAZER
+        const backup = toUpdate.map(e => ({ id: e.id, vencimento: e.vencimento }));
+        setLastAction({ type: "mover_mes", data: backup });
+
+        const promises = toUpdate.map(e => {
+          const d = parseISO(e.vencimento);
+          d.setMonth(tMonth - 1);
+          if (tMonth < sMonth) d.setFullYear(year + 1);
+          return supabase.from("saidas").update({ vencimento: format(d, "yyyy-MM-dd") }).eq("id", e.id);
+        });
+
+        await Promise.all(promises);
+        queryClient.invalidateQueries({ queryKey: ["expenses"] });
+        
+        setPeriodFilterName("Mover Mês");
+        setCopiedSlots([`${toUpdate.length} contas movidas`]);
+        setCopied(true);
+        setTimeout(() => { 
+          setCopied(false);
+          setLastAction(null);
+        }, 3000);
+      }
+
+      // 2. DELETAR
+      if (intent === "deletar") {
+        const dName = clientName?.toLowerCase() || ""; 
+        const match = expensesRef.current.find(e => e.descricao?.toLowerCase().includes(dName));
+        if (match) {
+          setLastAction({ type: "deletar", data: match });
+          deleteMutation.mutate(match.id);
+          setPeriodFilterName("Excluir");
+          setCopiedSlots([`Conta "${match.descricao}" removida`]);
+          setCopied(true);
+        }
+      }
+
+      // 3. EDITAR
+      if (intent === "editar" && updates) {
+        const dName = clientName?.toLowerCase() || ""; 
+        const match = expensesRef.current.find(e => e.descricao?.toLowerCase().includes(dName));
+        if (match) {
+          setLastAction({ type: "editar", data: { ...match } });
+          const cleanData: any = {};
+          if (updates.time) cleanData.vencimento = updates.time;
+          if (updates.clientName) cleanData.descricao = updates.clientName.toUpperCase();
+          if (updates.value) cleanData.valor = updates.value;
+          updateMutation.mutate({ id: match.id, data: cleanData });
+        }
+      }
+    };
+
+    window.addEventListener("jarvis-action", handleJarvis);
+    window.addEventListener("jarvis-undo", handleUndo);
+    return () => {
+      window.removeEventListener("jarvis-action", handleJarvis);
+      window.removeEventListener("jarvis-undo", handleUndo);
+    };
+  }, [supabase, queryClient, deleteMutation, updateMutation, lastAction]);
+
+  const handleUndo = async () => {
+    if (!lastAction) return;
+
+    if (lastAction.type === "mover_mes") {
+      const promises = lastAction.data.map((item: any) => 
+        supabase.from("saidas").update({ vencimento: item.vencimento }).eq("id", item.id)
+      );
+      await Promise.all(promises);
+    } else if (lastAction.type === "deletar") {
+      const { id, created_at, ...rest } = lastAction.data;
+      await supabase.from("saidas").insert([rest]);
+    } else if (lastAction.type === "editar") {
+      const { id, created_at, ...rest } = lastAction.data;
+      await supabase.from("saidas").update(rest).eq("id", id);
+    }
+
+    queryClient.invalidateQueries({ queryKey: ["expenses"] });
+    setLastAction(null);
+    setCopied(false);
+  };
+
+  const filteredExpenses = useMemo(() => {
+    let result = [...expenses];
+
+    // Period Filter
+    if (periodFilter === "diario") {
+      const todayStr = format(selectedDate, "yyyy-MM-dd");
+      result = result.filter(e => e.vencimento === todayStr);
+    } else if (periodFilter === "semanal") {
+      const start = startOfWeek(selectedDate);
+      const end = endOfWeek(selectedDate);
+      result = result.filter(e => {
+        const d = parseISO(e.vencimento);
+        return isWithinInterval(d, { start, end });
+      });
+    } else if (periodFilter === "mensal") {
+      const start = startOfMonth(selectedDate);
+      const end = endOfMonth(selectedDate);
+      result = result.filter(e => {
+        const d = parseISO(e.vencimento);
+        return isWithinInterval(d, { start, end });
+      });
+    }
+
+    // Search Filter
+    if (searchTerm) {
+      const s = searchTerm.toLowerCase();
+      result = result.filter(e => 
+        e.descricao?.toLowerCase().includes(s) || 
+        e.cartao?.toLowerCase().includes(s)
+      );
+    }
+
+    // Filter by Status
+    const today = new Date().toISOString().split("T")[0];
+    if (statusFilter === "PAGO") {
+      result = result.filter(e => e.paga);
+    } else if (statusFilter === "A VENCER") {
+      result = result.filter(e => !e.paga && e.vencimento >= today);
+    } else if (statusFilter === "VENCIDO") {
+      result = result.filter(e => !e.paga && e.vencimento < today);
+    }
+
+    // Sorting
+    result.sort((a, b) => {
+      if (sortField === "vencimento_asc") return a.vencimento.localeCompare(b.vencimento);
+      if (sortField === "vencimento_desc") return b.vencimento.localeCompare(a.vencimento);
+      if (sortField === "valor_asc") return (a.valor || 0) - (b.valor || 0);
+      if (sortField === "valor_desc") return (b.valor || 0) - (a.valor || 0);
+      if (sortField === "descricao_asc") return (a.descricao || "").localeCompare(b.descricao || "");
+      return 0;
+    });
+
+    return result;
+  }, [expenses, periodFilter, searchTerm, statusFilter, sortField, selectedDate]);
+
+  const stats = useMemo(() => {
+    const paid = filteredExpenses.filter(e => e.paga).reduce((acc, e) => acc + (e.valor || 0), 0);
+    const pending = filteredExpenses.filter(e => !e.paga).reduce((acc, e) => acc + (e.valor || 0), 0);
+    return { paid, pending, total: paid + pending };
+  }, [filteredExpenses]);
+
+  // Mutations
   const handleTogglePaid = (expense: any) => {
     const isPaid = !expense.paga;
     updateMutation.mutate({
@@ -159,14 +316,40 @@ export default function ExpensesPage() {
   }
 
   return (
-    <div className="px-4 pt-6 sm:px-8 sm:pt-6 space-y-6 animate-in fade-in duration-500 pb-32">
+    <div className="px-4 py-8 md:px-8 pb-32 space-y-6 animate-in fade-in duration-500 max-w-7xl mx-auto min-h-screen">
+      {/* Header Selectors */}
+      <div className="flex flex-row justify-between items-center gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-center bg-surface-section rounded-2xl p-0.5 shrink-0">
+            <button onClick={() => handleDayChange(-1)} className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-white transition-colors border-none"><ChevronLeft size={14} /></button>
+            <PremiumSelector value={selectedDate.getDate()} options={dayOptions} onSelect={handleDaySelect} className="bg-transparent !px-2 !py-1.5 w-[85px]" />
+            <button onClick={() => handleDayChange(1)} className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-white transition-colors border-none"><ChevronRight size={14} /></button>
+          </div>
+          <div className="flex items-center bg-surface-section rounded-2xl p-0.5 shrink-0"><PremiumSelector value={selectedDate.getMonth() + 1} options={monthOptions} onSelect={handleMonthSelect} className="bg-transparent !px-3 !py-1.5 min-w-[70px]" /></div>
+          <div className="flex items-center bg-surface-section rounded-2xl p-0.5 shrink-0"><PremiumSelector value={selectedDate.getFullYear()} options={yearOptions} onSelect={handleYearSelect} className="bg-transparent !px-3 !py-1.5 min-w-[55px]" /></div>
+          
+          <button 
+            onClick={handleSync} 
+            className={cn(
+              "w-9 h-9 rounded-2xl bg-surface-section hover:bg-surface-subtle transition-all flex items-center justify-center border-none shrink-0 ml-0.5", 
+              isSyncing && "animate-spin"
+            )}
+          >
+            <RefreshCw size={14} className="text-text-primary" />
+          </button>
+        </div>
+
+        <div className="hidden md:flex items-center gap-3">
+          <h1 className="text-sm font-black text-brand-primary italic tracking-tighter opacity-80 uppercase font-display">SAÍDAS & GESTÃO</h1>
+        </div>
+      </div>
+
       {/* Header & KPIs */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mt-4">
         <div>
-          <h2 className="text-4xl md:text-3xl font-black tracking-tight text-text-primary uppercase italic">
-            Saídas <span className="text-text-secondary font-medium lowercase">({periodFilter})</span>
-          </h2>
-          <div className="flex items-center gap-2 mt-2">
+          <h2 className="text-text-primary text-3xl font-bold italic uppercase">Saídas</h2>
+          <p className="text-text-secondary text-sm mt-1">Controle Financeiro</p>
+          <div className="flex items-center gap-2 mt-4">
             <div className="flex bg-surface-section/50 rounded-xl p-0.5 border-none">
               {["diario", "semanal", "mensal", "total"].map((p) => (
                 <button
@@ -223,8 +406,9 @@ export default function ExpensesPage() {
             value={statusFilter}
             options={[
               { value: "TODOS", label: "Todos os Status" },
-              { value: "PAGO", label: "Somente Pagos" },
-              { value: "PENDENTE", label: "Somente Pendentes" },
+              { value: "PAGO", label: "Pago" },
+              { value: "A VENCER", label: "A Vencer" },
+              { value: "VENCIDO", label: "Vencido" },
             ]}
             onSelect={setStatusFilter}
             className="bg-surface-page/50"
@@ -278,15 +462,10 @@ export default function ExpensesPage() {
                 {/* Vencimento */}
                 <div className="text-xs font-bold text-text-primary/80">
                   <InlineInput
-                    type="text"
-                    value={expense.vencimento ? format(parseISO(expense.vencimento), "dd/MM") : "--/--"}
+                    type="date"
+                    value={expense.vencimento || ""}
                     onSave={(v) => {
-                      const parts = v.split("/");
-                      if (parts.length === 2) {
-                        const year = new Date().getFullYear();
-                        const iso = `${year}-${parts[1]}-${parts[0]}`;
-                        updateMutation.mutate({ id: expense.id, data: { vencimento: iso } });
-                      }
+                      if (v) updateMutation.mutate({ id: expense.id, data: { vencimento: v } });
                     }}
                     className="px-0 bg-transparent hover:bg-transparent"
                   />
@@ -323,20 +502,49 @@ export default function ExpensesPage() {
 
                 {/* Status */}
                 <div className="flex justify-center">
-                  <button
-                    onClick={() => handleTogglePaid(expense)}
-                    className={cn(
-                      "px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border-none transition-all",
-                      expense.paga ? "bg-white/10 text-white/40" : "bg-brand-primary/20 text-brand-primary"
-                    )}
-                  >
-                    {expense.paga ? "PAGO" : "PENDENTE"}
-                  </button>
+                  {(() => {
+                    const today = new Date().toISOString().split("T")[0];
+                    const isOverdue = !expense.paga && expense.vencimento < today;
+                    const displayStatus = expense.paga ? "PAGO" : (isOverdue ? "VENCIDO" : "A VENCER");
+                    
+                    return (
+                      <PremiumSelector
+                        value={displayStatus}
+                        options={[
+                          { value: "PAGO", label: "PAGO" },
+                          { value: "A VENCER", label: "A VENCER" },
+                          { value: "VENCIDO", label: "VENCIDO" },
+                        ]}
+                        onSelect={(val) => {
+                          if (val === "PAGO") {
+                            if (!expense.paga) handleTogglePaid(expense);
+                          } else {
+                            if (expense.paga) handleTogglePaid(expense);
+                          }
+                        }}
+                        className={cn(
+                          "bg-transparent !px-2 !py-1 min-w-[95px] text-[8px] font-black tracking-widest border-none transition-all",
+                          expense.paga ? "!text-white/30" : (isOverdue ? "!text-rose-500 !bg-rose-500/10 !rounded-lg" : "!text-brand-primary")
+                        )}
+                      />
+                    );
+                  })()}
                 </div>
 
                 {/* Pago em */}
                 <div className="text-center text-[11px] font-bold text-text-secondary italic">
-                  {expense.data_pagamento ? format(parseISO(expense.data_pagamento), "dd/MM") : "--/--"}
+                  <InlineInput
+                    type="date"
+                    value={expense.data_pagamento || ""}
+                    onSave={(v) => {
+                      if (!v) {
+                        updateMutation.mutate({ id: expense.id, data: { data_pagamento: null, paga: false } });
+                      } else {
+                        updateMutation.mutate({ id: expense.id, data: { data_pagamento: v, paga: true } });
+                      }
+                    }}
+                    className="px-0 bg-transparent hover:bg-transparent justify-center italic"
+                  />
                 </div>
 
                 {/* Ações */}
@@ -462,6 +670,57 @@ export default function ExpensesPage() {
           </button>
         </form>
       </Modal>
+
+      {/* Alerta de Sucesso - FIXED BOTTOM */}
+      <AnimatePresence>
+        {copied && (
+          <motion.div 
+            initial={{ opacity: 0, y: 100, x: "-50%" }}
+            animate={{ opacity: 1, y: 0, x: "-50%" }}
+            exit={{ opacity: 0, y: 100, x: "-50%" }}
+            transition={{ type: "spring", damping: 25, stiffness: 200, ease: "easeInOut" }}
+            className="fixed bottom-28 md:bottom-12 left-1/2 bg-surface-section border border-white/5 rounded-[1.5rem] p-5 shadow-[0_30px_60px_rgba(0,0,0,0.9)] z-[999] min-w-[280px] max-w-[90vw] overflow-hidden"
+          >
+            <div className="flex items-center gap-3">
+              <div className="relative shrink-0">
+                <div className="absolute inset-0 bg-white/20 blur-xl rounded-full" />
+                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-black relative shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+                  <Check size={20} strokeWidth={4} />
+                </div>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[8px] font-black uppercase tracking-[0.2em] text-text-muted">Sucesso</span>
+                <h4 className="text-lg font-black text-white leading-tight">{periodFilterName}</h4>
+              </div>
+              
+              {lastAction && (
+                <button 
+                  onClick={handleUndo}
+                  className="ml-auto bg-brand-primary text-black h-10 px-4 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-widest hover:scale-105 active:scale-95 transition-all border-none"
+                >
+                  <RotateCcw size={14} strokeWidth={3} /> Rebobinar
+                </button>
+              )}
+            </div>
+            {copiedSlots.length > 0 && (
+              <div className="mt-4 bg-[#0c0c0e] rounded-[1rem] py-2.5 px-4 border border-white/5 shadow-inner">
+                 <p className="text-[9px] font-black text-white/70 tracking-[0.1em] text-center whitespace-nowrap overflow-hidden text-ellipsis">
+                  {copiedSlots.join(" - ")}
+                 </p>
+              </div>
+            )}
+            {/* Progress Bar (Contagem Regressiva) */}
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/5">
+              <motion.div 
+                initial={{ width: "100%" }}
+                animate={{ width: "0%" }}
+                transition={{ duration: 3, ease: "linear" }}
+                className="h-full bg-brand-primary"
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
