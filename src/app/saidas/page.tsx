@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { format, parseISO, startOfWeek, endOfWeek, isWithinInterval, startOfMonth, endOfMonth, addDays, subDays, eachDayOfInterval } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Plus, Search, Trash2, Edit2, RotateCcw, XCircle, Calendar, CreditCard, DollarSign, Check, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { Plus, Search, Filter, Trash2, Edit2, RotateCcw, XCircle, Calendar, CreditCard, DollarSign, Check, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { PremiumSelector } from "@/components/shared/premium-selector";
 import { useAgenda } from "@/lib/contexts/agenda-context";
 import { Modal } from "@/components/shared/modal";
@@ -306,7 +306,7 @@ export default function ExpensesPage() {
     return { paid, pending, total: paid + pending };
   }, [filteredExpenses]);
 
-  // Mutations & Helpers
+  // Mutations
   const handleTogglePaid = (expense: any) => {
     const isPaid = !expense.paga;
     updateMutation.mutate({
@@ -336,63 +336,6 @@ export default function ExpensesPage() {
       parcela: "1/1"
     });
     setIsModalOpen(true);
-  };
-
-  // Grid Navigation
-  const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null);
-  const inputRefs = useRef<Record<string, any>>({});
-
-  const handleNavigate = useCallback((rowIndex: number, colIndex: number, key: string, shift: boolean) => {
-    let nextRow = rowIndex;
-    let nextCol = colIndex;
-
-    const maxCols = 5; // 0: venc, 1: cartao, 2: desc, 3: valor, 4: pago_em
-    const maxRows = filteredExpenses.length;
-
-    if (key === "ArrowUp") nextRow = Math.max(0, rowIndex - 1);
-    else if (key === "ArrowDown") nextRow = Math.min(maxRows, rowIndex + 1);
-    else if (key === "ArrowLeft") nextCol = Math.max(0, colIndex - 1);
-    else if (key === "ArrowRight") nextCol = Math.min(maxCols - 1, colIndex + 1);
-    else if (key === "Tab") {
-      if (shift) {
-        if (colIndex > 0) nextCol = colIndex - 1;
-        else if (rowIndex > 0) {
-          nextRow = rowIndex - 1;
-          nextCol = maxCols - 1;
-        }
-      } else {
-        if (colIndex < maxCols - 1) nextCol = colIndex + 1;
-        else {
-          nextRow = rowIndex + 1;
-          nextCol = 0;
-        }
-      }
-    } else if (key === "Enter") {
-      nextRow = rowIndex + 1;
-    }
-
-    if (nextRow !== rowIndex || nextCol !== colIndex) {
-      setActiveCell({ row: nextRow, col: nextCol });
-      const nextRef = inputRefs.current[`${nextRow}-${nextCol}`];
-      if (nextRef) {
-        nextRef.focus();
-      }
-    }
-  }, [filteredExpenses.length]);
-
-  // Handle auto-save for new row
-  const handleCreateInline = (field: string, value: string) => {
-    const data = {
-      vencimento: format(new Date(), "yyyy-MM-dd"),
-      data_compra: format(new Date(), "yyyy-MM-dd"),
-      descricao: "NOVA CONTA",
-      valor: 0,
-      cartao: "DINHEIRO",
-      parcela: "1/1",
-      paga: false,
-      [field]: field === 'valor' ? parseFloat(value) || 0 : value.toUpperCase()
-    };
-    saveMutation.mutate(data);
   };
 
   if (loadingExpenses) {
@@ -537,75 +480,58 @@ export default function ExpensesPage() {
       </div>
 
       {/* Table Body */}
-      <div className="space-y-1 md:space-y-0 md:bg-surface-section/30 md:rounded-b-[2rem] border-none overflow-hidden pb-10">
+      <div className="space-y-1 md:space-y-0 md:bg-surface-section/30 md:rounded-b-[2rem] border-none overflow-hidden">
         {filteredExpenses.length === 0 ? (
           <div className="p-12 text-center text-text-muted uppercase text-[10px] font-black tracking-widest italic">
             Nenhuma conta registrada
           </div>
         ) : (
-          filteredExpenses.map((expense, rowIndex) => (
+          filteredExpenses.map((expense) => (
             <div key={expense.id}>
               {/* Desktop Row */}
-              <div 
-                className={cn(
-                  "hidden md:grid md:grid-cols-[100px_120px_1fr_100px_100px_100px_80px] items-center px-6 py-1 transition-all group relative border-none hover:bg-white/[0.04]",
-                  activeCell?.row === rowIndex && "bg-white/[0.02] shadow-[inset_0_0_20px_rgba(255,255,255,0.02)]"
-                )}
-              >
-                {/* 0. Vencimento */}
+              <div className="hidden md:grid md:grid-cols-[100px_120px_1fr_100px_100px_100px_80px] items-center px-6 py-3 transition-colors group relative border-none hover:bg-white/[0.02]">
+                {/* Vencimento */}
                 <div className="text-xs font-bold text-text-primary/80">
                   <InlineInput
-                    ref={el => { inputRefs.current[`${rowIndex}-0`] = el; }}
                     type="date"
-                    isActive={activeCell?.row === rowIndex && activeCell?.col === 0}
                     value={expense.vencimento || ""}
                     onSave={(v) => {
                       if (v) updateMutation.mutate({ id: expense.id, data: { vencimento: v } });
                     }}
-                    onNavigate={(key, shift) => handleNavigate(rowIndex, 0, key, shift)}
                     className="px-0 bg-transparent hover:bg-transparent"
                   />
                 </div>
 
-                {/* 1. Cartao */}
+                {/* Cartao */}
                 <div className="min-w-0">
                   <InlineInput
-                    ref={el => { inputRefs.current[`${rowIndex}-1`] = el; }}
-                    isActive={activeCell?.row === rowIndex && activeCell?.col === 1}
                     value={expense.cartao || "DINHEIRO"}
                     onSave={(v) => updateMutation.mutate({ id: expense.id, data: { cartao: v.toUpperCase() } })}
-                    onNavigate={(key, shift) => handleNavigate(rowIndex, 1, key, shift)}
                     className="text-[10px] font-black text-brand-primary uppercase tracking-tight px-0 bg-transparent hover:bg-transparent truncate"
                   />
                 </div>
 
-                {/* 2. Descricao */}
+                {/* Descricao */}
                 <div className="min-w-0">
                   <InlineInput
-                    ref={el => { inputRefs.current[`${rowIndex}-2`] = el; }}
-                    isActive={activeCell?.row === rowIndex && activeCell?.col === 2}
                     value={expense.descricao || ""}
                     onSave={(v) => updateMutation.mutate({ id: expense.id, data: { descricao: v.toUpperCase() } })}
-                    onNavigate={(key, shift) => handleNavigate(rowIndex, 2, key, shift)}
                     className="font-bold text-sm text-text-primary uppercase truncate px-0 bg-transparent hover:bg-transparent"
                   />
                 </div>
 
-                {/* 3. Valor */}
+                {/* Valor */}
                 <div className="text-center font-bold text-sm text-brand-primary/90">
                   <InlineInput
-                    ref={el => { inputRefs.current[`${rowIndex}-3`] = el; }}
-                    isActive={activeCell?.row === rowIndex && activeCell?.col === 3}
                     type="number"
                     prefix="R$"
                     value={expense.valor?.toFixed(2) || "0.00"}
                     onSave={(v) => updateMutation.mutate({ id: expense.id, data: { valor: parseFloat(v) || 0 } })}
-                    onNavigate={(key, shift) => handleNavigate(rowIndex, 3, key, shift)}
                     className="px-0 bg-transparent hover:bg-transparent justify-center"
                   />
                 </div>
 
-                {/* Status (Not indexed for flow for now as it uses selector) */}
+                {/* Status */}
                 <div className="flex justify-center">
                   {(() => {
                     const today = new Date().toISOString().split("T")[0];
@@ -636,11 +562,9 @@ export default function ExpensesPage() {
                   })()}
                 </div>
 
-                {/* 4. Pago em */}
+                {/* Pago em */}
                 <div className="text-center text-[11px] font-bold text-text-secondary italic">
                   <InlineInput
-                    ref={el => { inputRefs.current[`${rowIndex}-4`] = el; }}
-                    isActive={activeCell?.row === rowIndex && activeCell?.col === 4}
                     type="date"
                     value={expense.data_pagamento || ""}
                     onSave={(v) => {
@@ -650,13 +574,15 @@ export default function ExpensesPage() {
                         updateMutation.mutate({ id: expense.id, data: { data_pagamento: v, paga: true } });
                       }
                     }}
-                    onNavigate={(key, shift) => handleNavigate(rowIndex, 4, key, shift)}
                     className="px-0 bg-transparent hover:bg-transparent justify-center italic"
                   />
                 </div>
 
                 {/* Ações */}
                 <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => handleOpenModal(expense)} className="w-8 h-8 rounded-xl bg-white/5 text-text-secondary hover:bg-brand-primary hover:text-surface-page transition-all flex items-center justify-center border-none">
+                    <Edit2 size={14} />
+                  </button>
                   <button onClick={() => handleDelete(expense.id)} className="w-8 h-8 rounded-xl bg-white/5 text-rose-500/50 hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center border-none">
                     <Trash2 size={14} />
                    </button>
@@ -694,62 +620,7 @@ export default function ExpensesPage() {
             </div>
           ))
         )}
-
-        {/* Excel Empty Row for New Entry */}
-        <div className="hidden md:grid md:grid-cols-[100px_120px_1fr_100px_100px_100px_80px] items-center px-6 py-3 border-t border-white/5 bg-white/[0.01]">
-          <div className="text-xs font-bold text-text-muted">
-            <InlineInput
-              ref={el => { inputRefs.current[`${filteredExpenses.length}-0`] = el; }}
-              isActive={activeCell?.row === filteredExpenses.length && activeCell?.col === 0}
-              type="date"
-              value={format(new Date(), "yyyy-MM-dd")}
-              onSave={(v) => handleCreateInline('vencimento', v)}
-              onNavigate={(key, shift) => handleNavigate(filteredExpenses.length, 0, key, shift)}
-              className="px-0 bg-transparent opacity-50 focus:opacity-100"
-              placeholder="+ Novo"
-            />
-          </div>
-          <div className="min-w-0">
-            <InlineInput
-              ref={el => { inputRefs.current[`${filteredExpenses.length}-1`] = el; }}
-              isActive={activeCell?.row === filteredExpenses.length && activeCell?.col === 1}
-              value=""
-              placeholder="CARTÃO..."
-              onSave={(v) => handleCreateInline('cartao', v)}
-              onNavigate={(key, shift) => handleNavigate(filteredExpenses.length, 1, key, shift)}
-              className="text-[10px] font-black uppercase tracking-tight px-0 bg-transparent opacity-50 focus:opacity-100"
-            />
-          </div>
-          <div className="min-w-0">
-            <InlineInput
-              ref={el => { inputRefs.current[`${filteredExpenses.length}-2`] = el; }}
-              isActive={activeCell?.row === filteredExpenses.length && activeCell?.col === 2}
-              value=""
-              placeholder="DESCREVA A NOVA CONTA..."
-              onSave={(v) => handleCreateInline('descricao', v)}
-              onNavigate={(key, shift) => handleNavigate(filteredExpenses.length, 2, key, shift)}
-              className="font-bold text-sm uppercase px-0 bg-transparent opacity-50 focus:opacity-100"
-            />
-          </div>
-          <div className="text-center font-bold text-sm text-brand-primary/40">
-            <InlineInput
-              ref={el => { inputRefs.current[`${filteredExpenses.length}-3`] = el; }}
-              isActive={activeCell?.row === filteredExpenses.length && activeCell?.col === 3}
-              type="number"
-              prefix="R$"
-              value=""
-              placeholder="0,00"
-              onSave={(v) => handleCreateInline('valor', v)}
-              onNavigate={(key, shift) => handleNavigate(filteredExpenses.length, 3, key, shift)}
-              className="px-0 bg-transparent justify-center opacity-50 focus:opacity-100"
-            />
-          </div>
-          <div className="opacity-0">--</div>
-          <div className="opacity-0">--</div>
-          <div className="opacity-0">--</div>
-        </div>
       </div>
-
 
       {/* Modal */}
       <Modal

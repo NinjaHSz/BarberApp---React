@@ -1,7 +1,8 @@
 "use client";
 
 import { useCards, useSupabase } from "@/hooks/use-data";
-import { Plus, CreditCard, Trash2, Edit2, ChevronRight } from "lucide-react";
+import { Plus, CreditCard, Trash2, Edit2, ChevronRight, Ban, Wallet, Banknote } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { Modal } from "@/components/shared/modal";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -13,10 +14,10 @@ export default function CardsPage() {
   const { data: cards = [], isLoading: loadingCards } = useCards();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingCard, setEditingCard] = useState<Record<string, any> | null>(null);
+  const [editingCard, setEditingCard] = useState<any>(null);
 
   const saveMutation = useMutation({
-    mutationFn: async (data: Record<string, any>) => {
+    mutationFn: async (data: any) => {
       if (data.id) {
         const { error } = await supabase.from("cartoes").update(data).eq("id", data.id);
         if (error) throw error;
@@ -86,104 +87,81 @@ export default function CardsPage() {
         </button>
       </div>
 
-      {/* List Header (Desktop) */}
-      <div className="hidden md:grid md:grid-cols-[60px_1fr_1fr_120px_120px_100px] bg-white/[0.02] border-none text-[10px] font-black text-text-secondary uppercase tracking-[0.2em] px-8 py-5 items-center rounded-t-[2rem]">
-        <div>Ícone</div>
-        <div>Cartão / Banco</div>
-        <div>Titular</div>
-        <div className="text-center">Fechamento</div>
-        <div className="text-center">Vencimento</div>
-        <div className="text-right">Ações</div>
-      </div>
-
-      {/* Cards List */}
-      <div className="space-y-2 md:space-y-0 md:bg-surface-section/20 md:rounded-b-[2rem] border-none overflow-hidden">
+      {/* List */}
+      <div className="flex flex-col gap-3">
         {cards.length === 0 ? (
-          <div className="py-20 text-center text-text-muted italic text-[10px] uppercase font-bold tracking-widest opacity-20 bg-surface-section/10 rounded-[2rem] md:rounded-none">
+          <div className="py-20 text-center text-text-muted italic text-[10px] uppercase font-bold tracking-widest opacity-20 bg-surface-section/10 rounded-[2.5rem]">
             Nenhum cartão cadastrado
           </div>
         ) : (
           cards.map((card) => (
-            <div key={card.id}>
-              {/* Desktop Row */}
-              <Link 
-                href={`/cartoes/${card.id}`}
-                className="hidden md:grid md:grid-cols-[60px_1fr_1fr_120px_120px_100px] items-center px-8 py-4 transition-all duration-300 group hover:bg-white/[0.04] border-none relative"
-              >
-                <div className="w-10 h-10 rounded-xl bg-surface-page flex items-center justify-center text-brand-primary group-hover:scale-110 transition-transform">
-                  <CreditCard size={18} />
+            <Link 
+              key={card.id}
+              href={`/cartoes/${card.id}`}
+              className="group bg-surface-section/30 hover:bg-surface-section/50 rounded-2xl p-4 transition-all duration-300 relative overflow-hidden flex items-center gap-6 border-none shadow-lg hover:shadow-xl"
+            >
+              {/* Visual Anchor */}
+              <div className="w-12 h-12 rounded-xl bg-surface-page flex items-center justify-center text-brand-primary shadow-inner group-hover:scale-110 transition-transform duration-500 shrink-0">
+                <CreditCard size={20} />
+              </div>
+
+              {/* Info Column */}
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg font-black text-white uppercase tracking-tight group-hover:text-brand-primary transition-colors leading-tight truncate">
+                  {card.nome}
+                </h3>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">{card.banco || "Instituição"}</span>
+                  <span className="w-1 h-1 rounded-full bg-white/10" />
+                  <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">{card.titular || "Titular"}</span>
+                </div>
+              </div>
+
+              {/* Dates - Hidden on very small screens, shown as rows on mobile if needed, but keeping it clean here */}
+              <div className="hidden sm:flex items-center gap-4 px-6 border-l border-white/5">
+                <div className="text-right">
+                   <p className="text-[8px] font-black text-text-muted uppercase tracking-[0.1em]">Fechamento</p>
+                   <p className="text-xs font-black text-white">Dia {card.fechamento?.split('-')[2] || '--'}</p>
+                </div>
+                <div className="text-right">
+                   <p className="text-[8px] font-black text-brand-primary uppercase tracking-[0.1em]">Vencimento</p>
+                   <p className="text-xs font-black text-white">Dia {card.vencimento?.split('-')[2] || '--'}</p>
+                </div>
+              </div>
+
+              {/* Status & Actions */}
+              <div className="flex items-center gap-4">
+                <div className="hidden md:block text-right px-4">
+                  <span className="px-3 py-1 bg-brand-primary/10 text-brand-primary text-[9px] font-black uppercase rounded-full">Ativo</span>
                 </div>
                 
-                <div className="min-w-0 pr-4">
-                  <h3 className="text-sm font-black text-white uppercase tracking-tight group-hover:text-brand-primary transition-colors truncate">
-                    {card.nome}
-                  </h3>
-                  <p className="text-[9px] font-black text-text-muted uppercase tracking-widest truncate">
-                    {card.banco || "Instituição"}
-                  </p>
-                </div>
-
-                <div className="text-[10px] font-black text-text-secondary uppercase tracking-widest truncate">
-                  {card.titular || "Geral"}
-                </div>
-
-                <div className="text-center">
-                   <span className="px-3 py-1 bg-white/5 rounded-lg text-[10px] font-black text-white/50">
-                    Dia {card.fechamento?.split('-')[2] || '--'}
-                   </span>
-                </div>
-
-                <div className="text-center">
-                   <span className="px-3 py-1 bg-brand-primary/10 rounded-lg text-[10px] font-black text-brand-primary">
-                    Dia {card.vencimento?.split('-')[2] || '--'}
-                   </span>
-                </div>
-
-                <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-1">
                   <button 
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       handleOpenModal(card);
                     }}
-                    className="w-8 h-8 rounded-xl bg-white/5 text-text-muted hover:bg-brand-primary hover:text-surface-page transition-all flex items-center justify-center"
+                    className="p-2 text-text-muted hover:text-white transition-colors border-none"
                   >
-                    <Edit2 size={14} />
+                    <Edit2 size={16} />
                   </button>
                   <button 
                     onClick={(e) => handleDelete(card.id, e)}
-                    className="w-8 h-8 rounded-xl bg-white/5 text-text-muted hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center"
+                    className="p-2 text-text-muted hover:text-rose-500 transition-colors border-none"
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={16} />
                   </button>
                 </div>
-              </Link>
-
-              {/* Mobile Card (Compact List Style) */}
-              <Link 
-                href={`/cartoes/${card.id}`}
-                className="md:hidden flex items-center justify-between p-5 bg-surface-section/30 rounded-2xl mx-1 transition-all active:scale-[0.98] group border-none relative"
-              >
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="w-12 h-12 rounded-xl bg-surface-page flex items-center justify-center text-brand-primary shrink-0">
-                    <CreditCard size={20} />
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-black text-white uppercase truncate">{card.nome}</h3>
-                    <div className="flex items-center gap-2">
-                       <p className="text-[9px] font-black text-text-muted uppercase tracking-widest truncate">{card.banco}</p>
-                       <span className="w-1 h-1 rounded-full bg-white/10" />
-                       <p className="text-[9px] font-black text-brand-primary uppercase">Dia {card.vencimento?.split('-')[2]}</p>
-                    </div>
-                  </div>
+                
+                <div className="pl-2 group-hover:translate-x-1 transition-transform">
+                  <ChevronRight size={18} className="text-text-muted" />
                 </div>
-                <ChevronRight size={16} className="text-text-muted group-hover:text-brand-primary transition-colors" />
-              </Link>
-            </div>
+              </div>
+            </Link>
           ))
         )}
       </div>
-
 
       {/* Modal */}
       <Modal
@@ -194,7 +172,7 @@ export default function CardsPage() {
          <form onSubmit={(e) => {
           e.preventDefault();
           const formData = new FormData(e.currentTarget);
-          const data: Record<string, any> = {
+          const data: any = {
             nome: String(formData.get("nome")).toUpperCase(),
             banco: String(formData.get("banco")).toUpperCase(),
             titular: String(formData.get("titular")).toUpperCase(),
