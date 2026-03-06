@@ -1,8 +1,7 @@
 "use client";
 
 import { useCards, useSupabase } from "@/hooks/use-data";
-import { Plus, CreditCard, Trash2, Edit2, ChevronRight, Ban, Wallet, Banknote } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Plus, CreditCard, Trash2, Edit2, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Modal } from "@/components/shared/modal";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -14,10 +13,10 @@ export default function CardsPage() {
   const { data: cards = [], isLoading: loadingCards } = useCards();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingCard, setEditingCard] = useState<any>(null);
+  const [editingCard, setEditingCard] = useState<Record<string, any> | null>(null);
 
   const saveMutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: Record<string, any>) => {
       if (data.id) {
         const { error } = await supabase.from("cartoes").update(data).eq("id", data.id);
         if (error) throw error;
@@ -87,78 +86,104 @@ export default function CardsPage() {
         </button>
       </div>
 
-      {/* Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* List Header (Desktop) */}
+      <div className="hidden md:grid md:grid-cols-[60px_1fr_1fr_120px_120px_100px] bg-white/[0.02] border-none text-[10px] font-black text-text-secondary uppercase tracking-[0.2em] px-8 py-5 items-center rounded-t-[2rem]">
+        <div>Ícone</div>
+        <div>Cartão / Banco</div>
+        <div>Titular</div>
+        <div className="text-center">Fechamento</div>
+        <div className="text-center">Vencimento</div>
+        <div className="text-right">Ações</div>
+      </div>
+
+      {/* Cards List */}
+      <div className="space-y-2 md:space-y-0 md:bg-surface-section/20 md:rounded-b-[2rem] border-none overflow-hidden">
         {cards.length === 0 ? (
-          <div className="col-span-full py-20 text-center text-text-muted italic text-[10px] uppercase font-bold tracking-widest opacity-20 border-2 border-dashed border-white/5 rounded-[2.5rem]">
+          <div className="py-20 text-center text-text-muted italic text-[10px] uppercase font-bold tracking-widest opacity-20 bg-surface-section/10 rounded-[2rem] md:rounded-none">
             Nenhum cartão cadastrado
           </div>
         ) : (
           cards.map((card) => (
-            <Link 
-              key={card.id}
-              href={`/cartoes/${card.id}`}
-              className="group bg-surface-section/30 hover:bg-surface-section/50 rounded-[2.5rem] p-8 transition-all duration-500 relative overflow-hidden flex flex-col gap-8 border-none shadow-xl hover:shadow-2xl hover:-translate-y-1"
-            >
-              <div className="absolute -right-12 -top-12 w-48 h-48 bg-brand-primary/5 rounded-full blur-3xl group-hover:bg-brand-primary/10 transition-all duration-700" />
-              
-              <div className="flex justify-between items-start">
-                <div className="w-14 h-14 rounded-2xl bg-surface-page flex items-center justify-center text-brand-primary shadow-2xl group-hover:scale-110 transition-transform duration-500">
-                  <CreditCard size={28} />
+            <div key={card.id}>
+              {/* Desktop Row */}
+              <Link 
+                href={`/cartoes/${card.id}`}
+                className="hidden md:grid md:grid-cols-[60px_1fr_1fr_120px_120px_100px] items-center px-8 py-4 transition-all duration-300 group hover:bg-white/[0.04] border-none relative"
+              >
+                <div className="w-10 h-10 rounded-xl bg-surface-page flex items-center justify-center text-brand-primary group-hover:scale-110 transition-transform">
+                  <CreditCard size={18} />
                 </div>
-                <div className="text-right">
-                  <p className="text-[8px] font-black text-text-muted uppercase tracking-[0.2em] mb-1">Status</p>
-                  <span className="px-3 py-1 bg-brand-primary/10 text-brand-primary text-[9px] font-black uppercase rounded-full border-none">Ativo</span>
+                
+                <div className="min-w-0 pr-4">
+                  <h3 className="text-sm font-black text-white uppercase tracking-tight group-hover:text-brand-primary transition-colors truncate">
+                    {card.nome}
+                  </h3>
+                  <p className="text-[9px] font-black text-text-muted uppercase tracking-widest truncate">
+                    {card.banco || "Instituição"}
+                  </p>
                 </div>
-              </div>
 
-              <div>
-                <h3 className="text-2xl font-display font-black text-white uppercase tracking-tighter group-hover:text-brand-primary transition-colors leading-none">
-                  {card.nome}
-                </h3>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">{card.banco || "Instituição"}</span>
-                  <span className="w-1 h-1 rounded-full bg-white/10" />
-                  <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">{card.titular || "Titular"}</span>
+                <div className="text-[10px] font-black text-text-secondary uppercase tracking-widest truncate">
+                  {card.titular || "Geral"}
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4 pt-4">
-                <div className="bg-white/5 p-4 rounded-2xl">
-                   <p className="text-[8px] font-black text-text-muted uppercase tracking-[0.1em] mb-1">Fechamento</p>
-                   <p className="text-sm font-black text-white">Dia {card.fechamento?.split('-')[2] || '--'}</p>
+                <div className="text-center">
+                   <span className="px-3 py-1 bg-white/5 rounded-lg text-[10px] font-black text-white/50">
+                    Dia {card.fechamento?.split('-')[2] || '--'}
+                   </span>
                 </div>
-                <div className="bg-brand-primary/5 p-4 rounded-2xl">
-                   <p className="text-[8px] font-black text-brand-primary uppercase tracking-[0.1em] mb-1">Vencimento</p>
-                   <p className="text-sm font-black text-white">Dia {card.vencimento?.split('-')[2] || '--'}</p>
-                </div>
-              </div>
 
-              <div className="flex items-center justify-between pt-4 border-t border-white/5">
-                <button 
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleOpenModal(card);
-                  }}
-                  className="p-2 text-text-muted hover:text-white transition-colors border-none"
-                >
-                  <Edit2 size={16} />
-                </button>
-                <div className="flex items-center gap-1.5 text-[9px] font-black text-brand-primary uppercase tracking-widest group-hover:translate-x-2 transition-transform">
-                  Visualizar Perfil <ChevronRight size={12} />
+                <div className="text-center">
+                   <span className="px-3 py-1 bg-brand-primary/10 rounded-lg text-[10px] font-black text-brand-primary">
+                    Dia {card.vencimento?.split('-')[2] || '--'}
+                   </span>
                 </div>
-                <button 
-                  onClick={(e) => handleDelete(card.id, e)}
-                  className="p-2 text-text-muted hover:text-rose-500 transition-colors border-none"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            </Link>
+
+                <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button 
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleOpenModal(card);
+                    }}
+                    className="w-8 h-8 rounded-xl bg-white/5 text-text-muted hover:bg-brand-primary hover:text-surface-page transition-all flex items-center justify-center"
+                  >
+                    <Edit2 size={14} />
+                  </button>
+                  <button 
+                    onClick={(e) => handleDelete(card.id, e)}
+                    className="w-8 h-8 rounded-xl bg-white/5 text-text-muted hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </Link>
+
+              {/* Mobile Card (Compact List Style) */}
+              <Link 
+                href={`/cartoes/${card.id}`}
+                className="md:hidden flex items-center justify-between p-5 bg-surface-section/30 rounded-2xl mx-1 transition-all active:scale-[0.98] group border-none relative"
+              >
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="w-12 h-12 rounded-xl bg-surface-page flex items-center justify-center text-brand-primary shrink-0">
+                    <CreditCard size={20} />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-black text-white uppercase truncate">{card.nome}</h3>
+                    <div className="flex items-center gap-2">
+                       <p className="text-[9px] font-black text-text-muted uppercase tracking-widest truncate">{card.banco}</p>
+                       <span className="w-1 h-1 rounded-full bg-white/10" />
+                       <p className="text-[9px] font-black text-brand-primary uppercase">Dia {card.vencimento?.split('-')[2]}</p>
+                    </div>
+                  </div>
+                </div>
+                <ChevronRight size={16} className="text-text-muted group-hover:text-brand-primary transition-colors" />
+              </Link>
+            </div>
           ))
         )}
       </div>
+
 
       {/* Modal */}
       <Modal
@@ -169,7 +194,7 @@ export default function CardsPage() {
          <form onSubmit={(e) => {
           e.preventDefault();
           const formData = new FormData(e.currentTarget);
-          const data: any = {
+          const data: Record<string, any> = {
             nome: String(formData.get("nome")).toUpperCase(),
             banco: String(formData.get("banco")).toUpperCase(),
             titular: String(formData.get("titular")).toUpperCase(),
