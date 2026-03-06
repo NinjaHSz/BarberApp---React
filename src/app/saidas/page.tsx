@@ -157,6 +157,32 @@ export default function ExpensesPage() {
         }, 3000);
       }
 
+      // 1.1 AÇÃO EM MASSA: Sincronizar meses de pagamento
+      if (intent === "bulk_action" && action === "sincronizar_datas_pagamento") {
+        const toUpdate = expensesRef.current.filter(e => e.paga && e.data_pagamento && e.vencimento);
+        if (toUpdate.length === 0) return;
+
+        const backup = toUpdate.map(e => ({ id: e.id, data_pagamento: e.data_pagamento }));
+        setLastAction({ type: "sincronizar_datas_pagamento", data: backup });
+
+        const promises = toUpdate.map(e => {
+          const dPag = parseISO(e.data_pagamento);
+          const dVen = parseISO(e.vencimento);
+          const newDate = new Date(dPag);
+          newDate.setMonth(dVen.getMonth());
+          newDate.setFullYear(dVen.getFullYear());
+          return supabase.from("saidas").update({ data_pagamento: format(newDate, "yyyy-MM-dd") }).eq("id", e.id);
+        });
+
+        await Promise.all(promises);
+        queryClient.invalidateQueries({ queryKey: ["expenses"] });
+        
+        setPeriodFilterName("Sincronizar Meses");
+        setCopiedSlots([`${toUpdate.length} datas ajustadas`]);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 3000);
+      }
+
       // 2. DELETAR
       if (intent === "deletar") {
         const dName = clientName?.toLowerCase() || ""; 
@@ -199,6 +225,11 @@ export default function ExpensesPage() {
     if (lastAction.type === "mover_mes") {
       const promises = lastAction.data.map((item: any) => 
         supabase.from("saidas").update({ vencimento: item.vencimento }).eq("id", item.id)
+      );
+      await Promise.all(promises);
+    } else if (lastAction.type === "sincronizar_datas_pagamento") {
+      const promises = lastAction.data.map((item: any) => 
+        supabase.from("saidas").update({ data_pagamento: item.data_pagamento }).eq("id", item.id)
       );
       await Promise.all(promises);
     } else if (lastAction.type === "deletar") {

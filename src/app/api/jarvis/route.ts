@@ -17,7 +17,8 @@ Data atual de referência: ${currentDate}.
 
 Objetivo: Identificar a intenção e a data alvo.
 Intenções: 
-- "agendar", "navegar", "mudar_data", "editar", "deletar", "bulk_action"
+- "agendar", "navegar", "mudar_data", "editar", "deletar"
+- "bulk_action" (Ações que afetam múltiplos registros, como mover todas as contas de um mês para outro, ou ajustar datas de pagamento de várias saídas de uma vez)
 - "consultar_agenda" (Se o usuário perguntar por horários, vagas, quem está agendado, o que tem pra hoje)
 - "consultar_saidas" (Se perguntar sobre gastos, lucro, contas)
 - "desconhecida"
@@ -105,7 +106,12 @@ JSON esperado:
   "availableSlots": string[] | null 
 }
 
+- "targetTable": Para ações de saidas, use "saidas".
+- "action": Se o usuário pedir para colocar o pagamento no mesmo mês de vencimento (ou sincronizar datas), use "sincronizar_datas_pagamento". Se pedir para mover contas de um mês para outro, use "mover_mes".
+- Se for bulk_action para saidas, targetTable DEVE ser "saidas".
+
 No spokenResponse, cite EXATAMENTE o dia e hora que foi agendado. Ex: "Agendado para 03 de Janeiro às 20:20".
+Se for um ajuste de datas, confirme que foi realizado.
 Use um tom Premium, Ágil e Amigável.`;
 
     const finalRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
