@@ -33,19 +33,13 @@ export function AutocompleteInput<T = unknown>({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const filteredSuggestions = useMemo(() => {
-    if (value.length === 0) return [];
+    if (!value) return suggestions.slice(0, 8);
     return suggestions.filter((s) =>
       s.label.toLowerCase().includes(value.toLowerCase())
     );
   }, [value, suggestions]);
 
-  useEffect(() => {
-    if (value.length > 0 && filteredSuggestions.length > 0) {
-      setIsOpen(true);
-    } else {
-      setIsOpen(false);
-    }
-  }, [value, filteredSuggestions.length]);
+  // Remove the useEffect that fought with manual state changes
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -68,19 +62,35 @@ export function AutocompleteInput<T = unknown>({
     }
   };
 
+  const handleBlur = (e: React.FocusEvent) => {
+    // If the click is inside the autocomplete container, don't close yet
+    if (containerRef.current?.contains(e.relatedTarget as Node)) return;
+    setIsOpen(false);
+    
+    const trimmed = value.trim();
+    const match = suggestions.find(
+      (s) => s.label.toLowerCase().trim() === trimmed.toLowerCase()
+    );
+    if (match && trimmed !== "") {
+      onSelect(match);
+    }
+  };
+
   return (
     <div className={cn("relative w-full", className)} ref={containerRef}>
       <input
         type="text"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        onFocus={() => {
-          if (value.length > 0 && filteredSuggestions.length > 0) {
-            setIsOpen(true);
-          }
+        onChange={(e) => {
+          const val = e.target.value;
+          onChange(val);
+          const hasMatches = val ? suggestions.some(s => s.label.toLowerCase().includes(val.toLowerCase())) : suggestions.length > 0;
+          setIsOpen(hasMatches);
         }}
+        onKeyDown={handleKeyDown}
+        onBlur={handleBlur}
+        placeholder={placeholder}
+        onFocus={() => setIsOpen(true)}
         className={cn(
           "w-full bg-surface-subtle border-none rounded-2xl px-4 py-3 text-sm text-text-primary outline-none focus:ring-1 focus:ring-brand-primary placeholder:text-text-muted",
           inputClassName
@@ -88,12 +98,13 @@ export function AutocompleteInput<T = unknown>({
       />
 
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-[#1c1c1f]/90 backdrop-blur-3xl rounded-2xl p-1.5 shadow-2xl z-[600] border-none max-h-48 overflow-y-auto custom-scroll">
+        <div className="absolute top-full left-0 right-0 mt-2 bg-[#1c1c1f] backdrop-blur-3xl rounded-2xl p-1.5 shadow-2xl z-[2000] border border-white/10 max-h-48 overflow-y-auto custom-scroll">
           {filteredSuggestions.map((suggestion) => (
             <button
               key={suggestion.id}
               type="button"
-              onClick={() => {
+              onMouseDown={(e) => {
+                e.preventDefault();
                 onSelect(suggestion);
                 setIsOpen(false);
               }}

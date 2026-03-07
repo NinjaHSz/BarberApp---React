@@ -27,6 +27,7 @@ interface AppointmentFormProps {
   freeSlots: FreeSlot[];
   currentDate: Date;
   clients: any[];
+  procedures: any[];
   onSave: (record: AppointmentRecord) => void;
   onCopy?: (label: string, times: string[]) => void;
   onDateChange?: (date: Date) => void;
@@ -40,6 +41,7 @@ export const AppointmentForm = memo(function AppointmentForm({
   freeSlots,
   currentDate,
   clients,
+  procedures,
   onSave,
   onCopy,
   onDateChange,
@@ -77,13 +79,17 @@ export const AppointmentForm = memo(function AppointmentForm({
   const handleSelectService = useCallback((item: Suggestion<string>) => {
     setForm(prev => {
       const updates: Partial<AppointmentRecord> = { service: item.value };
-      if (item.subLabel) {
-        const price = parseFloat(item.subLabel.replace("R$ ", "").replace(",", "."));
+      const match = procedures.find(p => p.nome?.toLowerCase().trim() === item.value?.toLowerCase().trim());
+      if (match) {
+        updates.value = match.preco ?? match.valor ?? 0;
+      } else if (item.subLabel) {
+        const raw = item.subLabel.replace("R$ ", "").replace(/\./g, "").replace(",", ".");
+        const price = parseFloat(raw);
         if (!isNaN(price)) updates.value = price;
       }
       return { ...prev, ...updates };
     });
-  }, []);
+  }, [procedures]);
 
   const handleSelectClient = useCallback(async (item: Suggestion<string>) => {
     const clientObj = clients.find(
@@ -133,7 +139,7 @@ export const AppointmentForm = memo(function AppointmentForm({
 
       const nextDay = usedSoFar + 1;
       const isRenew = isRenewalDay || (limite > 0 && usedSoFar >= limite) || nextDay === 1;
-      const dayLabel = isRenew ? "RENOVAÇÃO 1 DIA" : `${nextDay} DIA`;
+      const dayLabel = isRenew ? "RENOVAÇÃO 1º DIA" : `${nextDay}º DIA`;
       
       setForm(prev => ({
         ...prev,
@@ -143,7 +149,15 @@ export const AppointmentForm = memo(function AppointmentForm({
         ...(isRenew && clientObj.valor_plano ? { value: clientObj.valor_plano } : {}),
       }));
     } else {
-      setForm(prev => ({ ...prev, client: item.value }));
+      setForm(prev => {
+        const updates: Partial<AppointmentRecord> = { client: item.value };
+        if (clientObj?.preset) {
+          if (clientObj.preset.service) updates.service = clientObj.preset.service;
+          if (clientObj.preset.value) updates.value = parseFloat(clientObj.preset.value) || 0;
+          if (clientObj.preset.payment) updates.paymentMethod = clientObj.preset.payment;
+        }
+        return { ...prev, ...updates };
+      });
     }
   }, [clients, currentDate]);
 

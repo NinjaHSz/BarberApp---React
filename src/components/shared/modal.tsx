@@ -44,7 +44,7 @@ export function Modal({ isOpen, onClose, title, subtitle, icon, children, classN
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className={cn(
-                "w-full max-w-lg bg-surface-section rounded-[2.5rem] shadow-2xl pointer-events-auto overflow-hidden flex flex-col border-none max-h-[90vh]",
+                "w-full max-w-lg bg-surface-section rounded-[2.5rem] shadow-2xl pointer-events-auto flex flex-col border-none max-h-[90vh]",
                 className
               )}
             >

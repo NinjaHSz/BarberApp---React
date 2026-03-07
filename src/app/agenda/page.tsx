@@ -69,6 +69,7 @@ const RecordRow = memo(function RecordRowComponent({
   clientSuggestions,
   serviceSuggestions,
   clients,
+  procedures,
 }: { 
   record: Appointment; 
   onUpdate: (id: string, updates: Partial<Appointment>) => void; 
@@ -78,6 +79,7 @@ const RecordRow = memo(function RecordRowComponent({
   clientSuggestions: Suggestion<string>[];
   serviceSuggestions: Suggestion<string>[];
   clients: any[];
+  procedures: any[];
 }) {
   const isEmpty = record.isEmpty;
   const isBreak = record.client === "PAUSA";
@@ -129,7 +131,7 @@ const RecordRow = memo(function RecordRowComponent({
       
       const nextDay = usedSoFar + 1;
       const isRenew = isRenewalDay || (limite > 0 && usedSoFar >= limite) || nextDay === 1;
-      updates.service = isRenew ? "RENOVAÇÃO 1 DIA" : `${nextDay} DIA`;
+      updates.service = isRenew ? "RENOVAÇÃO 1º DIA" : `${nextDay}º DIA`;
       updates.paymentMethod = isRenew ? "PIX" : "PLANO";
       if (isRenew && match.valor_plano) updates.value = match.valor_plano;
     } else if (match?.preset) {
@@ -192,7 +194,21 @@ const RecordRow = memo(function RecordRowComponent({
             value={isEmpty ? "" : (isBreak ? "RESERVADO" : record.service)}
             placeholder={isEmpty ? "A DEFINIR" : "Serviço..."}
             suggestions={isBreak ? [] : serviceSuggestions}
-            onSave={(val) => onUpdate(record.id, { service: val || "A DEFINIR" })}
+            onSave={(val, item) => {
+              const updates: Partial<Appointment> = { service: val || "A DEFINIR" };
+              // 1. Try finding by name in procedures list
+              const match = procedures.find(p => p.nome?.toLowerCase().trim() === val?.toLowerCase().trim());
+              if (match) {
+                updates.value = match.preco ?? match.valor ?? 0;
+              } 
+              // 2. Fallback: Parse from subLabel if item is available
+              else if (item?.subLabel) {
+                 const raw = item.subLabel.replace("R$ ", "").replace(/\./g, "").replace(",", ".");
+                 const price = parseFloat(raw);
+                 if (!isNaN(price)) updates.value = price;
+              }
+              onUpdate(record.id, updates);
+            }}
             className={cn(
               "text-sm uppercase font-medium",
               isBreak ? "text-text-muted italic" : isEmpty ? "text-text-muted/40" : record.service === "A DEFINIR" ? "text-rose-500 font-black animate-pulse" : "text-text-primary"
@@ -360,8 +376,12 @@ export default function AgendaPage() {
   
   const serviceSuggestions: Suggestion<string>[] = useMemo(() => 
     procedures?.map(p => ({ 
-      id: p.id, label: p.nome, value: p.nome, 
-      subLabel: p.valor ? `R$ ${p.valor.toFixed(2)}` : undefined 
+      id: String(p.id), 
+      label: p.nome, 
+      value: p.nome, 
+      subLabel: (p.preco !== undefined && p.preco !== null) 
+        ? `R$ ${p.preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` 
+        : undefined 
     })) || [], [procedures]
   );
 
@@ -917,6 +937,7 @@ export default function AgendaPage() {
                 clientSuggestions={clientSuggestions}
                 serviceSuggestions={serviceSuggestions}
                 clients={clients || []}
+                procedures={procedures || []}
               /> 
             )) 
           )}
@@ -939,6 +960,7 @@ export default function AgendaPage() {
             freeSlots={freeSlots}
             currentDate={currentDate}
             clients={clients || []}
+            procedures={procedures || []}
             onSave={handleSaveModal}
             onDateChange={setCurrentDate}
             onCopy={(label, times) => {

@@ -8,7 +8,7 @@ interface InlineAutocompleteProps {
   value: string;
   placeholder?: string;
   suggestions: Suggestion<string>[];
-  onSave: (value: string) => void;
+  onSave: (value: string, item?: Suggestion<string>) => void;
   className?: string;
 }
 
@@ -31,11 +31,15 @@ export function InlineAutocomplete({
   }, [value, isEditing]);
 
   const filteredSuggestions = useMemo(() => {
-    if (!inputValue) return suggestions.slice(0, 8);
+    // Treat placeholder text as empty string to show more suggestions on focus
+    const isPlaceholder = inputValue === "A DEFINIR" || inputValue === "---" || (!inputValue && !!placeholder);
+    const search = isPlaceholder ? "" : inputValue;
+    
+    if (!search) return suggestions.slice(0, 15);
     return suggestions
-      .filter((s) => s.label.toLowerCase().includes(inputValue.toLowerCase()))
-      .slice(0, 8);
-  }, [inputValue, suggestions]);
+      .filter((s) => s.label.toLowerCase().includes(search.toLowerCase()))
+      .slice(0, 15);
+  }, [inputValue, suggestions, placeholder]);
 
   const handleStartEdit = () => {
     setIsEditing(true);
@@ -50,14 +54,19 @@ export function InlineAutocomplete({
     setInputValue(item.label);
     setIsOpen(false);
     setIsEditing(false);
-    if (item.label !== value) onSave(item.label);
+    onSave(item.label, item);
   };
 
   const handleBlur = (e: React.FocusEvent) => {
     if (containerRef.current?.contains(e.relatedTarget as Node)) return;
     setIsOpen(false);
     setIsEditing(false);
-    if (inputValue !== value) onSave(inputValue);
+    const trimmedIn = inputValue.trim();
+    const trimmedVal = (value || "").trim();
+    if (trimmedIn !== trimmedVal) {
+      const match = suggestions.find(s => s.label.toLowerCase().trim() === trimmedIn.toLowerCase());
+      onSave(trimmedIn, match);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -67,7 +76,12 @@ export function InlineAutocomplete({
       } else {
         setIsOpen(false);
         setIsEditing(false);
-        if (inputValue !== value) onSave(inputValue);
+        const trimmedIn = inputValue.trim();
+        const trimmedVal = (value || "").trim();
+        if (trimmedIn !== trimmedVal) {
+          const match = suggestions.find(s => s.label.toLowerCase().trim() === trimmedIn.toLowerCase());
+          onSave(trimmedIn, match);
+        }
       }
       e.preventDefault();
     }
@@ -111,7 +125,7 @@ export function InlineAutocomplete({
         onChange={handleChange}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
-        onFocus={() => setIsOpen(filteredSuggestions.length > 0)}
+        onFocus={() => setIsOpen(true)}
         className={cn(
           "w-full bg-surface-subtle border-none rounded px-2 py-0.5 outline-none focus:ring-1 focus:ring-brand-primary text-sm",
           className
@@ -119,13 +133,13 @@ export function InlineAutocomplete({
         autoComplete="off"
       />
       {isOpen && filteredSuggestions.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-[#1c1c1f]/95 backdrop-blur-xl rounded-xl p-1 shadow-2xl z-[600] max-h-48 overflow-y-auto">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-[#1a1a1d] border border-white/10 rounded-xl p-1 shadow-2xl z-[1000] max-h-48 overflow-y-auto">
           {filteredSuggestions.map((s) => (
             <button
               key={s.id}
               type="button"
               onMouseDown={(e) => {
-                e.preventDefault(); // Prevent blur before click
+                e.preventDefault(); 
                 handleSelect(s);
               }}
               className="w-full text-left px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-text-muted hover:text-white hover:bg-white/5 transition-all flex justify-between items-center"
