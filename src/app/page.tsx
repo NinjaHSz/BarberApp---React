@@ -1,34 +1,19 @@
 "use client";
 
-import { useClients, useExpenses, useAppointments } from "@/hooks/use-data";
-import { LayoutDashboard, CalendarDays, TrendingUp, ArrowDownRight, Users, ChevronLeft, ChevronRight } from "lucide-react";
+import { useDashboardRevenue } from "@/hooks/use-dashboard-revenue";
+import { buildChartLabels, type ChartGranularity } from "@/lib/dashboard-revenue";
+import { LayoutDashboard, CalendarDays, TrendingUp, ArrowDownRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useMemo, useCallback } from "react";
 import { 
   format, 
   isToday, 
   isThisMonth, 
-  isThisYear, 
-  parseISO, 
-  subMonths, 
   startOfMonth, 
   endOfMonth,
   addDays,
   subDays,
-  subWeeks,
-  subYears,
   eachDayOfInterval,
-  eachMonthOfInterval,
-  isSameDay,
-  isSameMonth,
-  isSameYear,
-  startOfDay,
-  endOfDay,
-  startOfWeek,
-  endOfWeek,
-  startOfYear,
-  endOfYear,
-  getDay,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { PremiumSelector } from "@/components/shared/premium-selector";
@@ -81,97 +66,32 @@ function KPICard({ title, value, icon: Icon, colSpan = "" }: { title: string; va
 
 export default function DashboardPage() {
   const { selectedDate: currentDate, setSelectedDate: setCurrentDate } = useAgenda();
-  const [chartTimeframe, setChartTimeframe] = useState("mensal");
-  const { data: clients = [], isLoading: loadingClients } = useClients();
-  const { data: appointments = [], isLoading: loadingAppointments } = useAppointments();
-  const { data: expenses = [], isLoading: loadingExpenses } = useExpenses();
-  
-  const isLoading = loadingClients || loadingAppointments || loadingExpenses;
+  const [chartTimeframe, setChartTimeframe] = useState<ChartGranularity>("mensal");
+  const { data: revenueData, isLoading } = useDashboardRevenue(currentDate, chartTimeframe);
 
-  const handleDayChange = useCallback((delta: number) => setCurrentDate(prev => delta > 0 ? addDays(prev, delta) : subDays(prev, Math.abs(delta))), []);
-  const handleDaySelect = useCallback((day: number) => { setCurrentDate(prev => { const d = new Date(prev); d.setDate(day); return d; }); }, []);
-  const handleMonthSelect = useCallback((month: number) => { setCurrentDate(prev => { const d = new Date(prev); d.setMonth(month - 1); return d; }); }, []);
-  const handleYearSelect = useCallback((year: number) => { setCurrentDate(prev => { const d = new Date(prev); d.setFullYear(year); return d; }); }, []);
+  const handleDayChange = useCallback((delta: number) => setCurrentDate(prev => delta > 0 ? addDays(prev, delta) : subDays(prev, Math.abs(delta))), [setCurrentDate]);
+  const handleDaySelect = useCallback((day: number) => { setCurrentDate(prev => { const d = new Date(prev); d.setDate(day); return d; }); }, [setCurrentDate]);
+  const handleMonthSelect = useCallback((month: number) => { setCurrentDate(prev => { const d = new Date(prev); d.setMonth(month - 1); return d; }); }, [setCurrentDate]);
+  const handleYearSelect = useCallback((year: number) => { setCurrentDate(prev => { const d = new Date(prev); d.setFullYear(year); return d; }); }, [setCurrentDate]);
 
-  const stats = useMemo(() => {
-    const selectedDayRevenue = appointments
-      .filter(a => a.date && isSameDay(parseISO(a.date), currentDate))
-      .reduce((acc, a) => acc + (a.value || 0), 0);
-
-    const selectedMonthRevenue = appointments
-      .filter(a => a.date && isSameMonth(parseISO(a.date), currentDate))
-      .reduce((acc, a) => acc + (a.value || 0), 0);
-
-    const selectedYearRevenue = appointments
-      .filter(a => a.date && isSameYear(parseISO(a.date), currentDate))
-      .reduce((acc, a) => acc + (a.value || 0), 0);
-
-    return {
-      todayRevenue: selectedDayRevenue,
-      monthRevenue: selectedMonthRevenue,
-      yearRevenue: selectedYearRevenue
-    };
-  }, [appointments, currentDate]);
+  const stats = revenueData?.stats ?? { day: 0, month: 0, year: 0 };
 
   const daysInMonth = eachDayOfInterval({ start: startOfMonth(currentDate), end: endOfMonth(currentDate) });
   const dayOptions = daysInMonth.map((d: Date) => ({ value: d.getDate(), label: `${format(d, 'EEE', { locale: ptBR }).toUpperCase().slice(0, 3)} ${format(d, 'dd')}` }));
   const monthOptions = [ { value: 1, label: "JAN" }, { value: 2, label: "FEV" }, { value: 3, label: "MAR" }, { value: 4, label: "ABR" }, { value: 5, label: "MAI" }, { value: 6, label: "JUN" }, { value: 7, label: "JUL" }, { value: 8, label: "AGO" }, { value: 9, label: "SET" }, { value: 10, label: "OUT" }, { value: 11, label: "NOV" }, { value: 12, label: "DEZ" } ];
-  const yearOptions = [ { value: 2024, label: "'24" }, { value: 2025, label: "'25" }, { value: 2026, label: "'26" } ];
+  const yearOptions = useMemo(() => {
+    const startYear = 2024;
+    const endYear = new Date().getFullYear() + 2;
+    const options = [];
+    for (let y = startYear; y <= endYear; y++) {
+      options.push({ value: y, label: `'${String(y).slice(-2)}` });
+    }
+    return options;
+  }, []);
 
   const chartData = useMemo(() => {
-    let labels: string[] = [];
-    let revenues: number[] = [];
-
-    if (chartTimeframe === "diario") {
-      // Show every 2 hours from 08:00 to 20:00
-      const hours = ["08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00"];
-      labels = hours;
-      revenues = hours.map(h => {
-        const hInt = parseInt(h.split(":")[0]);
-        return appointments
-          .filter(a => {
-            if (!a.date || !a.time) return false;
-            const aDate = parseISO(a.date);
-            const aHour = parseInt(a.time.split(":")[0]);
-            return isSameDay(aDate, currentDate) && (aHour === hInt || aHour === hInt + 1);
-          })
-          .reduce((acc, a) => acc + (a.value || 0), 0);
-      });
-    } else if (chartTimeframe === "semanal") {
-      // Monday to Saturday (1 to 6 in getDay)
-      const start = startOfWeek(currentDate, { weekStartsOn: 1 }); // Start on Monday
-      const days = eachDayOfInterval({ start, end: addDays(start, 5) });
-      labels = days.map(d => format(d, 'EEE', { locale: ptBR }).toUpperCase());
-      revenues = days.map(d => {
-        return appointments
-          .filter(a => a.date && isSameDay(parseISO(a.date), d))
-          .reduce((acc, a) => acc + (a.value || 0), 0);
-      });
-    } else if (chartTimeframe === "mensal") {
-      // All days of the specific month
-      const days = eachDayOfInterval({ 
-        start: startOfMonth(currentDate), 
-        end: endOfMonth(currentDate) 
-      });
-      labels = days.map(d => format(d, 'dd'));
-      revenues = days.map(d => {
-        return appointments
-          .filter(a => a.date && isSameDay(parseISO(a.date), d))
-          .reduce((acc, a) => acc + (a.value || 0), 0);
-      });
-    } else if (chartTimeframe === "anual") {
-      // All 12 months of the year
-      const months = eachMonthOfInterval({
-        start: startOfYear(currentDate),
-        end: endOfYear(currentDate)
-      });
-      labels = months.map(m => format(m, 'MMM', { locale: ptBR }).toUpperCase());
-      revenues = months.map(m => {
-        return appointments
-          .filter(a => a.date && isSameMonth(parseISO(a.date), m))
-          .reduce((acc, a) => acc + (a.value || 0), 0);
-      });
-    }
+    const labels = buildChartLabels(currentDate, chartTimeframe);
+    const revenues = revenueData?.chartValues ?? [];
 
     return {
       labels,
@@ -189,7 +109,7 @@ export default function DashboardPage() {
         },
       ],
     };
-  }, [appointments, currentDate, chartTimeframe]);
+  }, [revenueData?.chartValues, currentDate, chartTimeframe]);
 
   const chartOptions = {
     responsive: true,
@@ -259,16 +179,16 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <KPICard title={isToday(currentDate) ? "Dia Atual" : format(currentDate, "dd/MM/yyyy")} value={`R$ ${stats.todayRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} icon={CalendarDays} />
-        <KPICard title={isThisMonth(currentDate) ? "Mês Recorrente" : format(currentDate, "MMMM", { locale: ptBR }).toUpperCase()} value={`R$ ${stats.monthRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} icon={TrendingUp} />
-        <KPICard title="Faturamento Anual" value={`R$ ${stats.yearRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} icon={LayoutDashboard} />
+        <KPICard title={isToday(currentDate) ? "Dia Atual" : format(currentDate, "dd/MM/yyyy")} value={`R$ ${stats.day.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} icon={CalendarDays} />
+        <KPICard title={isThisMonth(currentDate) ? "Mês Recorrente" : format(currentDate, "MMMM", { locale: ptBR }).toUpperCase()} value={`R$ ${stats.month.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} icon={TrendingUp} />
+        <KPICard title="Faturamento Anual" value={`R$ ${stats.year.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} icon={LayoutDashboard} />
       </div>
 
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 px-2">
           <h3 className="text-[10px] font-black text-white uppercase tracking-widest italic">Análise de Faturamento</h3>
           <div className="flex bg-surface-section rounded-lg p-0.5">
-            {["diario", "semanal", "mensal", "anual"].map((f) => (
+            {(["diario", "semanal", "mensal", "anual"] as const).map((f) => (
               <button
                 key={f}
                 onClick={() => setChartTimeframe(f)}
