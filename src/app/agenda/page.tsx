@@ -75,7 +75,7 @@ const RecordRow = memo(function RecordRowComponent({
   record: Appointment; 
   onUpdate: (id: string, updates: Partial<Appointment>) => void; 
   onCancel: (record: Appointment) => void;
-  onAdd: (time: string, date: string) => void;
+  onAdd: (time: string, date: string, barberId?: number) => void;
   onEdit: (record: Appointment) => void;
   clientSuggestions: Suggestion<string>[];
   serviceSuggestions: Suggestion<string>[];
@@ -268,7 +268,7 @@ const RecordRow = memo(function RecordRowComponent({
             </>
           ) : (
             <button 
-              onClick={() => onAdd(record.time, record.date)}
+              onClick={() => onAdd(record.time, record.date, record.barberId ? Number(record.barberId) : undefined)}
               className="w-full py-1.5 rounded-lg bg-brand-primary text-surface-page text-[10px] font-black uppercase transition-all border-none"
             >
               Agendar
@@ -296,7 +296,7 @@ const RecordRow = memo(function RecordRowComponent({
             </div>
           ) : (
             <button 
-              onClick={() => onAdd(record.time, record.date)}
+              onClick={() => onAdd(record.time, record.date, record.barberId ? Number(record.barberId) : undefined)}
               className="px-4 py-2 rounded-lg bg-text-primary text-surface-page text-[10px] font-black uppercase active:scale-95 border-none"
             >
               Agendar
@@ -366,17 +366,26 @@ export default function AgendaPage() {
         .eq("data", selectedDateStr)
         .order("horario", { ascending: true });
       if (error) throw error;
-      return (data || []).map((r: any) => ({
-        id: String(r.id), 
-        date: r.data, 
-        time: r.horario, 
-        client: r.cliente,
-        service: r.procedimento || "A DEFINIR", 
-        observations: r.observacoes,
-        value: r.valor, 
-        paymentMethod: r.forma_pagamento,
-        barberId: r.barbeiro_id
-      }) as Appointment);
+      return (data || []).map((r: any) => {
+        let barberId = r.barbeiro_id;
+        if (!barberId && r.barbeiro && barbers.length > 0) {
+          const matchedBarber = barbers.find((b: any) => b.nome?.toLowerCase() === r.barbeiro?.toLowerCase());
+          if (matchedBarber) {
+            barberId = matchedBarber.id;
+          }
+        }
+        return {
+          id: String(r.id), 
+          date: r.data, 
+          time: r.horario, 
+          client: r.cliente,
+          service: r.procedimento || "A DEFINIR", 
+          observations: r.observacoes,
+          value: r.valor, 
+          paymentMethod: r.forma_pagamento,
+          barberId: barberId
+        } as Appointment;
+      });
     }
   });
 
@@ -410,8 +419,19 @@ export default function AgendaPage() {
       if (updates.observations !== undefined) dbUpdates.observacoes = updates.observations;
       if (updates.paymentMethod !== undefined) dbUpdates.forma_pagamento = updates.paymentMethod;
       if (updates.time !== undefined) dbUpdates.horario = updates.time;
-      if (updates.barberId !== undefined) dbUpdates.barbeiro_id = updates.barberId;
       if (updates.date !== undefined) dbUpdates.data = updates.date;
+
+      const activeBarberId = updates.barberId !== undefined ? updates.barberId : selectedBarberId;
+      const matchedBarber = barbers.find((b: any) => String(b.id) === String(activeBarberId));
+      const barberName = matchedBarber ? matchedBarber.nome : null;
+      const barberIdNum = matchedBarber ? Number(matchedBarber.id) : (activeBarberId ? Number(activeBarberId) : null);
+
+      if (updates.barberId !== undefined) {
+        dbUpdates.barbeiro_id = updates.barberId;
+        if (matchedBarber) {
+          dbUpdates.barbeiro = matchedBarber.nome;
+        }
+      }
 
       if (id.startsWith('empty-')) {
         const { data, error } = await supabase.from('agendamentos').insert({
@@ -422,7 +442,8 @@ export default function AgendaPage() {
           observacoes: updates.observations || "",
           data: updates.date || dateStr,
           horario: updates.time || id.replace('empty-', ''),
-          barbeiro_id: updates.barberId || selectedBarberId
+          barbeiro_id: barberIdNum,
+          barbeiro: barberName
         }).select().single();
         if (error) throw error;
         return data; // Retorna o registro criado com o ID real
@@ -643,7 +664,21 @@ export default function AgendaPage() {
     }, 2500);
   }, [slots, currentDate]);
 
-  const openAddModal = useCallback((time: string) => { setEditingRecord({ time, date: selectedDateStr, client: "", service: "", value: 0, paymentMethod: "PIX", observations: "" }); setIsModalOpen(true); }, [selectedDateStr]);
+  const openAddModal = useCallback((time: string, date?: string, barberId?: number) => {
+    const lucas = barbers.find((b: any) => b.nome?.toLowerCase() === "lucas");
+    const defaultBarberId = barberId || selectedBarberId || (lucas ? lucas.id : (barbers[0]?.id || null));
+    setEditingRecord({ 
+      time, 
+      date: date || selectedDateStr, 
+      client: "", 
+      service: "", 
+      value: 0, 
+      paymentMethod: "PIX", 
+      observations: "",
+      barberId: defaultBarberId ? Number(defaultBarberId) : undefined
+    }); 
+    setIsModalOpen(true); 
+  }, [selectedDateStr, selectedBarberId, barbers]);
   const openEditModal = useCallback((record: Appointment) => { setEditingRecord(record); setIsModalOpen(true); }, []);
   const handleSaveModal = useCallback(async (formData: Partial<Appointment>) => {
     if (!formData) return;
