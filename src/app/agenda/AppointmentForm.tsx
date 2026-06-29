@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, memo, useRef, useEffect, useMemo } from "react";
-import { Search, Calendar, Clock, Coffee, Copy, Sun, Sunset, Moon, List, ChevronDown } from "lucide-react";
+import { Search, Calendar, Clock, Coffee, Copy, Sun, Sunset, Moon, List, ChevronDown, Scissors } from "lucide-react";
 import { format } from "date-fns";
 import { AutocompleteInput, type Suggestion } from "@/components/shared/autocomplete-input";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,7 @@ interface AppointmentRecord {
   observations?: string;
   value?: number;
   paymentMethod?: string;
+  barberId?: number;
 }
 
 interface FreeSlot { time: string; }
@@ -32,6 +33,7 @@ interface AppointmentFormProps {
   currentDate: Date;
   clients: any[];
   procedures: any[];
+  barbers: any[];
   onSave: (record: AppointmentRecord) => void;
   onCopy?: (label: string, times: string[]) => void;
   onDateChange?: (date: Date) => void;
@@ -46,6 +48,7 @@ export const AppointmentForm = memo(function AppointmentForm({
   currentDate,
   clients,
   procedures,
+  barbers,
   onSave,
   onCopy,
   onDateChange,
@@ -262,14 +265,34 @@ export const AppointmentForm = memo(function AppointmentForm({
             <Coffee size={12} /> Pausa
           </button>
         </div>
-        <AutocompleteInput
-          value={form.client || ""}
-          onChange={val => set("client", val)}
-          onSelect={handleSelectClient}
-          suggestions={clientSuggestions}
-          placeholder="Digite o nome do cliente..."
-          inputClassName="uppercase font-bold figma-form-input"
-        />
+        <div className="flex gap-2 items-center">
+          <div className="flex-1 min-w-0">
+            <AutocompleteInput
+              value={form.client || ""}
+              onChange={val => set("client", val)}
+              onSelect={handleSelectClient}
+              suggestions={clientSuggestions}
+              placeholder="Digite o nome do cliente..."
+              inputClassName="uppercase font-bold figma-form-input"
+            />
+          </div>
+          {barbers.length > 1 && (
+            <button
+              type="button"
+              onClick={() => {
+                const currentIdx = barbers.findIndex(b => Number(b.id) === Number(form.barberId));
+                const nextIdx = (currentIdx + 1) % barbers.length;
+                const nextBarber = barbers[nextIdx];
+                set("barberId", Number(nextBarber.id));
+              }}
+              className="px-3 h-[45px] shrink-0 rounded-2xl bg-surface-subtle hover:bg-white/5 border-none text-[10px] font-black uppercase text-brand-primary cursor-pointer active:scale-95 transition-all flex items-center gap-1.5"
+              title="Alternar Barbeiro"
+            >
+              <Scissors size={12} />
+              <span>{barbers.find(b => Number(b.id) === Number(form.barberId))?.nome?.split(' ')[0] || "Sem Barbeiro"}</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Data + Horário */}

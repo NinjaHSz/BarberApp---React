@@ -946,6 +946,7 @@ export default function AgendaPage() {
             currentDate={currentDate}
             clients={clients || []}
             procedures={procedures || []}
+            barbers={barbers}
             onSave={handleSaveModal}
             onDateChange={setCurrentDate}
             onCopy={(label, times) => {
