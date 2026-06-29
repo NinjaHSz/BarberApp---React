@@ -881,14 +881,7 @@ export default function AgendaPage() {
                 <span className="text-[8px] font-black uppercase tracking-[0.2em] text-text-muted">Sucesso</span>
                 <h4 className="text-lg font-black text-white leading-tight">{periodFilterName}</h4>
               </div>
-              {lastAction && (
-                <button 
-                  onClick={handleUndo}
-                  className="ml-auto bg-brand-primary text-black h-10 px-4 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-widest hover:scale-105 active:scale-95 transition-all border-none cursor-pointer"
-                >
-                  <RotateCcw size={14} strokeWidth={3} /> Rebobinar
-                </button>
-              )}
+
             </div>
             <div className="mt-4 bg-[#0c0c0e] rounded-[1rem] py-2.5 px-4 border border-white/5 shadow-inner">
                <p className="text-[9px] font-black text-white/70 tracking-[0.1em] text-center whitespace-nowrap overflow-hidden text-ellipsis">
@@ -941,6 +934,7 @@ export default function AgendaPage() {
         title={editingRecord?.id ? "Editar Agendamento" : "Novo Agendamento"}
         subtitle={editingRecord?.id ? (editingRecord.client || "") : "Preencha os dados abaixo"}
         icon={editingRecord?.id ? <Edit size={20} /> : <CalendarPlus size={20} />}
+        className="modal-compact"
       >
         {isModalOpen && editingRecord && (
           <AppointmentForm
@@ -972,25 +966,28 @@ export default function AgendaPage() {
         isOpen={isCancelModalOpen}
         onClose={() => setIsCancelModalOpen(false)}
         title="Cancelar Horário"
-        subtitle="Confirma o cancelamento?"
-        icon={<Trash2 size={18} className="text-rose-500" />}
+        icon={<Trash2 size={16} className="text-rose-500" />}
+        className="modal-compact"
       >
-        <div className="flex flex-col gap-3 py-2">
-          <div className="bg-rose-500/5 p-5 rounded-[1.2rem] border border-rose-500/10 text-center">
-            <h4 className="text-lg font-black text-white uppercase italic">
-              {recordToCancel?.time.substring(0, 5)} — {recordToCancel?.client.toUpperCase()}
-            </h4>
-            <p className="text-[10px] font-bold text-text-muted mt-2 leading-tight">
-              Esta ação é permanente. Deseja prosseguir?
-            </p>
-          </div>
+        <div className="flex flex-col gap-4 py-1 text-center">
+          <p className="text-[11px] font-bold text-text-secondary leading-normal">
+            Deseja mesmo cancelar o horário de <span className="text-white font-black uppercase">{recordToCancel?.client}</span> às <span className="text-white font-black">{recordToCancel?.time.substring(0, 5)}</span>?
+          </p>
 
-          <button
-            onClick={confirmCancel}
-            className="figma-form-button-save border-none"
-          >
-            Confirmar
-          </button>
+          <div className="flex w-full gap-2">
+            <button
+              onClick={() => setIsCancelModalOpen(false)}
+              className="flex-1 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white text-[9px] font-black uppercase tracking-wider border-none transition-all active:scale-95 cursor-pointer"
+            >
+              Voltar
+            </button>
+            <button
+              onClick={confirmCancel}
+              className="flex-1 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-[9px] font-black uppercase tracking-wider border-none transition-all active:scale-95 cursor-pointer"
+            >
+              Confirmar
+            </button>
+          </div>
         </div>
       </Modal>
     </div>

@@ -116,6 +116,13 @@ body {
   overflow-y: auto !important;
 }
 
+.figma-modal.modal-compact {
+  max-width: 380px !important;
+  border-radius: 28px !important;
+  gap: 8px !important;
+  padding: 16px 20px 20px 20px !important;
+}
+
 .figma-modal-header {
   display: flex;
   flex-direction: row;

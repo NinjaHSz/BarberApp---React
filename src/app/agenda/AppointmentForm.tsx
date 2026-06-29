@@ -407,7 +407,7 @@ export const AppointmentForm = memo(function AppointmentForm({
             )}
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex gap-1.5 overflow-x-auto pb-1 pt-0.5 custom-scroll scrollbar-none snap-x">
             {freeSlots.map(s => {
               const isSelected = form.time === s.time;
               return (
@@ -415,7 +415,7 @@ export const AppointmentForm = memo(function AppointmentForm({
                   key={s.time}
                   type="button"
                   onClick={() => set("time", s.time)}
-                  className={cn("figma-free-slot border-none", isSelected && "figma-free-slot-active")}
+                  className={cn("figma-free-slot border-none shrink-0 snap-start", isSelected && "figma-free-slot-active")}
                 >
                   {s.time}
                 </button>
@@ -467,7 +467,7 @@ export const AppointmentForm = memo(function AppointmentForm({
           placeholder="Informações adicionais..."
           value={form.observations || ""}
           onChange={e => set("observations", e.target.value)}
-          className="figma-form-textarea font-medium"
+          className="figma-form-textarea font-medium !h-16 py-2.5"
         />
       </div>
 
@@ -475,9 +475,9 @@ export const AppointmentForm = memo(function AppointmentForm({
       <button
         type="button"
         onClick={() => onSave({ ...form, service: form.service?.trim() || "A DEFINIR" })}
-        className="figma-form-button-save border-none"
+        className="w-full py-3 mt-2 rounded-2xl bg-brand-primary text-surface-page text-[11px] font-black uppercase tracking-widest border-none hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer shadow-lg shadow-brand-primary/10"
       >
-        Salvar
+        Salvar Agendamento
       </button>
     </div>
   );
