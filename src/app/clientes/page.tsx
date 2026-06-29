@@ -98,82 +98,79 @@ export default function ClientsPage() {
 
   return (
     <div className="px-4 pt-6 sm:px-8 sm:pt-6 space-y-6 animate-in fade-in duration-500 pb-32 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-        <div>
-          <h2 className="text-4xl md:text-3xl font-black tracking-tight text-text-primary uppercase italic">
+      {/* Header and Search/Controls Row */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        <div className="flex items-center gap-4 shrink-0">
+          <h2 className="text-3xl font-black tracking-tight text-text-primary uppercase italic leading-none">
             Clientes <span className="text-text-secondary font-medium lowercase">({filteredClients.length})</span>
           </h2>
-          <div className="flex items-center gap-3 mt-2">
-             <div className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full">
-                <div className="w-1.5 h-1.5 rounded-full bg-brand-primary shadow-[0_0_8px_rgba(212,212,216,0.5)]" />
-                <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">{stats.vip} MEMBROS VIP</span>
-             </div>
+          <div className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full shrink-0">
+            <div className="w-1.5 h-1.5 rounded-full bg-brand-primary shadow-[0_0_8px_rgba(212,212,216,0.5)]" />
+            <span className="text-[10px] font-black text-text-muted uppercase tracking-widest">{stats.vip} VIP</span>
           </div>
         </div>
 
-        <button
-          onClick={() => handleOpenModal()}
-          className="bg-brand-primary text-surface-page px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:brightness-110 transition-all flex items-center gap-2 shadow-xl shadow-brand-primary/10 border-none w-full md:w-auto justify-center"
-        >
-          <Plus size={16} /> Cadastrar Cliente
-        </button>
-      </div>
+        {/* Controls Container */}
+        <div className="flex flex-wrap items-center gap-3 flex-1 xl:justify-end">
+          {/* Search & Filters */}
+          <div className="flex flex-wrap gap-2 items-center bg-surface-section/30 p-2 rounded-2xl border-none shadow-2xl flex-1 max-w-2xl">
+            <div className="flex-1 min-w-[160px] relative group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-primary transition-colors" size={14} />
+              <input
+                type="text"
+                placeholder="Buscar por nome ou telefone..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-surface-page/50 border-none pl-9 pr-3 h-9 rounded-xl outline-none focus:bg-surface-page/80 transition-all font-bold text-[10px] uppercase text-white shadow-inner"
+              />
+            </div>
+            <PremiumSelector
+              value={planFilter}
+              options={[
+                { value: "TODOS", label: "Todos os Planos" },
+                { value: "Nenhum", label: "Sem Plano" },
+                { value: "Mensal", label: "Plano Mensal" },
+                { value: "Semestral", label: "Plano Semestral" },
+                { value: "Anual", label: "Plano Anual" },
+              ]}
+              onSelect={setPlanFilter}
+              className="bg-surface-page/50 !h-9 !py-1 !px-2 text-[9px]"
+            />
 
-      {/* Search & Filters */}
-      <div className="flex flex-wrap gap-4 items-center bg-surface-section/30 p-4 rounded-[1.5rem] border-none shadow-2xl">
-        <div className="flex-1 min-w-[240px] relative group w-full">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-primary transition-colors" size={16} />
-          <input
-            type="text"
-            placeholder="Buscar por nome ou telefone..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-surface-page/50 border-none pl-12 pr-4 h-11 rounded-2xl outline-none focus:bg-surface-page/80 transition-all font-bold text-xs uppercase text-white shadow-inner"
-          />
-        </div>
-        <PremiumSelector
-          value={planFilter}
-          options={[
-            { value: "TODOS", label: "Todos os Planos" },
-            { value: "Nenhum", label: "Sem Plano" },
-            { value: "Mensal", label: "Plano Mensal" },
-            { value: "Semestral", label: "Plano Semestral" },
-            { value: "Anual", label: "Plano Anual" },
-          ]}
-          onSelect={setPlanFilter}
-          className="bg-surface-page/50"
-        />
+            <div className="flex bg-surface-page/50 rounded-xl p-0.5 gap-0.5">
+              <button 
+                onClick={() => setViewMode("grid")}
+                className={cn("p-1.5 rounded-lg transition-all border-none", viewMode === "grid" ? "bg-brand-primary text-surface-page" : "text-text-muted hover:text-white")}
+              >
+                <LayoutGrid size={14} />
+              </button>
+              <button 
+                onClick={() => setViewMode("list")}
+                className={cn("p-1.5 rounded-lg transition-all border-none", viewMode === "list" ? "bg-brand-primary text-surface-page" : "text-text-muted hover:text-white")}
+              >
+                <List size={14} />
+              </button>
+            </div>
 
-        <div className="flex bg-surface-page/50 rounded-xl p-1 gap-1">
-          <button 
-            onClick={() => setViewMode("grid")}
-            className={cn(
-              "p-2 rounded-lg transition-all border-none",
-              viewMode === "grid" ? "bg-brand-primary text-surface-page" : "text-text-muted hover:text-white"
+            {searchTerm && (
+              <button 
+                onClick={() => setSearchTerm("")}
+                className="text-[9px] font-black text-text-muted uppercase tracking-widest hover:text-white transition-colors flex items-center gap-1.5 px-2 border-none"
+              >
+                <XCircle size={12} /> Limpar
+              </button>
             )}
+          </div>
+
+          {/* Cadastrar button as a small square next to search/filters */}
+          <button
+            onClick={() => handleOpenModal()}
+            className="w-10 h-10 bg-brand-primary text-surface-page rounded-2xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg shadow-brand-primary/10 border-none shrink-0 cursor-pointer"
+            title="Cadastrar Cliente"
           >
-            <LayoutGrid size={16} />
-          </button>
-          <button 
-            onClick={() => setViewMode("list")}
-            className={cn(
-              "p-2 rounded-lg transition-all border-none",
-              viewMode === "list" ? "bg-brand-primary text-surface-page" : "text-text-muted hover:text-white"
-            )}
-          >
-            <List size={16} />
+            <Plus size={18} />
           </button>
         </div>
-
-        {searchTerm && (
-          <button 
-            onClick={() => setSearchTerm("")}
-            className="text-[10px] font-black text-text-muted uppercase tracking-widest hover:text-white transition-colors flex items-center gap-2 px-2 border-none"
-          >
-            <XCircle size={14} /> Limpar
-          </button>
-        )}
       </div>
 
       {/* Grid or List View */}
@@ -351,41 +348,41 @@ export default function ClientsPage() {
           };
           if (editingClient?.id) data.id = editingClient.id;
           saveMutation.mutate(data);
-        }} className="space-y-6">
-          <div className="space-y-1">
-            <label className="text-[9px] font-black uppercase text-text-muted tracking-widest ml-1">Nome Completo</label>
-            <input name="nome" required defaultValue={editingClient?.nome} className="w-full bg-surface-page/50 border-none p-4 rounded-2xl outline-none font-black uppercase text-sm" />
+        }} className="flex flex-col gap-3 py-2 w-full">
+          <div className="figma-form-group">
+            <label className="figma-form-label">Nome Completo</label>
+            <input name="nome" required defaultValue={editingClient?.nome} className="figma-form-input uppercase font-bold" />
           </div>
 
-          <div className="space-y-1">
-            <label className="text-[9px] font-black uppercase text-text-muted tracking-widest ml-1">Telefone</label>
-            <input name="telefone" defaultValue={editingClient?.telefone} className="w-full bg-surface-page/50 border-none p-4 rounded-2xl outline-none font-bold text-sm" />
+          <div className="figma-form-group">
+            <label className="figma-form-label">Telefone</label>
+            <input name="telefone" defaultValue={editingClient?.telefone} className="figma-form-input font-bold" />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-             <div className="space-y-1">
-              <label className="text-[9px] font-black uppercase text-text-muted tracking-widest ml-1">Plano Especial</label>
-              <select name="plano" defaultValue={editingClient?.plano || "Nenhum"} className="w-full bg-surface-page/50 border-none p-4 rounded-2xl outline-none font-black uppercase text-xs appearance-none">
-                <option value="Nenhum" className="bg-surface-section">Nenhum</option>
-                <option value="Mensal" className="bg-surface-section">Mensal</option>
-                <option value="Semestral" className="bg-surface-section">Semestral</option>
-                <option value="Anual" className="bg-surface-section">Anual</option>
-                <option value="Pausado" className="bg-surface-section">Pausado</option>
+          <div className="grid grid-cols-2 gap-3">
+             <div className="figma-form-group">
+              <label className="figma-form-label">Plano Especial</label>
+              <select name="plano" defaultValue={editingClient?.plano || "Nenhum"} className="figma-form-input font-bold uppercase appearance-none">
+                <option value="Nenhum" className="bg-[#18181B]">Nenhum</option>
+                <option value="Mensal" className="bg-[#18181B]">Mensal</option>
+                <option value="Semestral" className="bg-[#18181B]">Semestral</option>
+                <option value="Anual" className="bg-[#18181B]">Anual</option>
+                <option value="Pausado" className="bg-[#18181B]">Pausado</option>
               </select>
             </div>
-            <div className="space-y-1">
-              <label className="text-[9px] font-black uppercase text-text-muted tracking-widest ml-1">Valor Plano (R$)</label>
-              <input type="number" name="valor_plano" step="0.01" defaultValue={editingClient?.valor_plano} className="w-full bg-surface-page/50 border-none p-4 rounded-2xl outline-none font-black text-sm text-brand-primary" />
+            <div className="figma-form-group">
+              <label className="figma-form-label">Valor Plano (R$)</label>
+              <input type="number" name="valor_plano" step="0.01" defaultValue={editingClient?.valor_plano} className="figma-form-input font-bold" />
             </div>
           </div>
 
-           <div className="space-y-1">
-            <label className="text-[9px] font-black uppercase text-text-muted tracking-widest ml-1">Notas Internas</label>
-            <textarea name="observacoes_cliente" defaultValue={editingClient?.observacoes_cliente} className="w-full bg-surface-page/50 border-none p-4 rounded-2xl outline-none font-medium text-xs h-24 resize-none" />
+           <div className="figma-form-group">
+            <label className="figma-form-label">Notas Internas</label>
+            <textarea name="observacoes_cliente" defaultValue={editingClient?.observacoes_cliente} className="figma-form-textarea font-medium" />
           </div>
 
-          <button type="submit" disabled={saveMutation.isPending} className="w-full bg-brand-primary text-surface-page font-black py-4 rounded-2xl border-none uppercase tracking-widest text-xs shadow-xl shadow-brand-primary/10 transition-all active:scale-[0.98]">
-            {saveMutation.isPending ? "Salvando..." : editingClient?.id ? "Salvar Alterações" : "Cadastrar Cliente"}
+          <button type="submit" disabled={saveMutation.isPending} className="figma-form-button-save border-none">
+            {saveMutation.isPending ? "Salvando..." : "Salvar"}
           </button>
         </form>
       </Modal>

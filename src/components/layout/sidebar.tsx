@@ -2,36 +2,44 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 import { 
   LayoutDashboard, 
   Calendar, 
   Users, 
   Crown, 
-  MinusCircle, 
-  CreditCard, 
+  Scissors, 
   Settings 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { JarvisAssistant } from "@/components/layout/jarvis-assistant";
 
 const navItems = [
   { href: "/", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/agenda", icon: Calendar, label: "Agenda" },
   { href: "/clientes", icon: Users, label: "Clientes" },
+  { href: "/barbeiros", icon: Scissors, label: "Barbeiros" },
   { href: "/planos", icon: Crown, label: "Planos" },
-  { href: "/saidas", icon: MinusCircle, label: "Saídas" },
-  { href: "/cartoes", icon: CreditCard, label: "Cartões" },
-  { href: "/ajustes", icon: Settings, label: "Ajustes" },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return (
+      <aside className="hidden md:flex flex-col h-full bg-surface-section w-16 border-none text-white shrink-0" />
+    );
+  }
 
   return (
-    <aside className="hidden md:flex flex-col h-full bg-surface-section transition-all duration-300 w-20 hover:w-64 group/sidebar z-50 overflow-hidden border-none text-white">
+    <aside className="hidden md:flex flex-col h-full bg-surface-section transition-all duration-300 w-16 hover:w-64 group/sidebar z-50 overflow-hidden border-none text-white">
       {/* Brand Section */}
       <div className="h-24 flex items-center group-hover/sidebar:justify-start transition-all overflow-hidden shrink-0">
-        <div className="w-20 shrink-0 flex items-center justify-center">
+        <div className="w-16 shrink-0 flex items-center justify-center">
           <div className="w-12 h-12 rounded-full overflow-hidden shadow-2xl bg-surface-page">
             <img 
               src="/logo.png" 
@@ -66,7 +74,7 @@ export function Sidebar() {
                 isActive ? "bg-surface-subtle text-white" : "text-text-secondary hover:bg-white/5 hover:text-white"
               )}
             >
-              <div className="w-20 shrink-0 flex items-center justify-center">
+              <div className="w-16 shrink-0 flex items-center justify-center">
                 <item.icon size={20} className={cn(isActive && "text-brand-primary")} />
               </div>
               <span className="opacity-0 group-hover/sidebar:opacity-100 transition-opacity text-xs font-bold uppercase tracking-wider whitespace-nowrap">
@@ -80,10 +88,7 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Jarvis Integrated Button */}
-      <div className="mt-auto shrink-0 pb-6">
-        <JarvisAssistant sidebarOnly />
-      </div>
+
     </aside>
   );
 }

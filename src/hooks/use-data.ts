@@ -45,14 +45,14 @@ export function useProcedures() {
   });
 }
 
-export function useExpenses() {
+export function useBarbers() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
     const channel = supabase
-      .channel("expenses_realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "saidas" }, () => {
-        queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      .channel("barbers_realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "barbeiros" }, () => {
+        queryClient.invalidateQueries({ queryKey: ["barbers"] });
       })
       .subscribe();
 
@@ -62,30 +62,40 @@ export function useExpenses() {
   }, [queryClient]);
 
   return useQuery({
-    queryKey: ["expenses"],
+    queryKey: ["barbers"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("saidas")
-        .select("*")
-        .order("vencimento", { ascending: true });
-      if (error) throw error;
-      return data;
-    },
-  });
-}
-
-export function useCards() {
-  return useQuery({
-    queryKey: ["cards"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("cartoes")
+        .from("barbeiros")
         .select("*")
         .order("nome", { ascending: true });
       if (error) throw error;
       return data;
     },
   });
+}
+
+export interface DbAppointment {
+  id: string;
+  data: string;
+  horario: string;
+  cliente: string;
+  procedimento: string | null;
+  observacoes: string | null;
+  valor: number | null;
+  forma_pagamento: string | null;
+  barbeiro_id: string | null;
+}
+
+export interface Appointment {
+  id: string;
+  date: string;
+  time: string;
+  client: string;
+  service: string;
+  observations: string | null;
+  value: number;
+  paymentMethod: string;
+  barberId: string | null;
 }
 
 export function useAppointments() {
@@ -104,23 +114,39 @@ export function useAppointments() {
     };
   }, [queryClient]);
 
-  return useQuery({
+  return useQuery<Appointment[]>({
     queryKey: ["appointments"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("agendamentos")
-        .select("*")
-        .order("data", { ascending: false });
-      if (error) throw error;
-      return (data || []).map((r: any) => ({
+      const all: DbAppointment[] = [];
+      let from = 0;
+      const PAGE_SIZE = 1000;
+
+      while (true) {
+        const { data, error } = await supabase
+          .from("agendamentos")
+          .select("*")
+          .order("data", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, from + PAGE_SIZE - 1);
+
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+
+        all.push(...(data as DbAppointment[]));
+        if (data.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
+      }
+
+      return all.map((r) => ({
         id: r.id,
         date: r.data,
         time: r.horario,
         client: r.cliente,
         service: r.procedimento || "A DEFINIR",
         observations: r.observacoes,
-        value: r.valor || 0,
+        value: Number(r.valor) || 0,
         paymentMethod: r.forma_pagamento || "PIX",
+        barberId: r.barbeiro_id,
       }));
     },
   });

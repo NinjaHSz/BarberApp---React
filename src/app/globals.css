@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "react-day-picker/dist/style.css";
 
 :root {
   /* Text Tokens */
@@ -98,4 +99,338 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
+}
+
+/* Figma Modal Design Classes */
+.figma-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch !important; /* Stretch children to avoid shrinking */
+  padding: 20px !important;
+  gap: 12px !important;
+  background: var(--surface-section) !important;
+  border-radius: 32px !important;
+  width: 100%;
+  max-width: 496px !important;
+  max-height: 90vh !important;
+  overflow-y: auto !important;
+}
+
+.figma-modal-header {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.figma-modal-title {
+  font-family: var(--font-sans) !important;
+  font-style: italic !important;
+  font-weight: 900 !important;
+  font-size: 20px !important;
+  line-height: 30px !important;
+  color: var(--text-primary) !important;
+  text-transform: uppercase !important;
+}
+
+.figma-modal-close {
+  width: 40px !important;
+  height: 40px !important;
+  background: #242427 !important;
+  border-radius: 100000px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: var(--text-primary) !important;
+  transition: all 0.2s !important;
+  cursor: pointer !important;
+}
+
+.figma-modal-close:hover {
+  filter: brightness(1.2) !important;
+}
+
+.figma-form-group {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch !important; /* Stretch children (inputs/selects) to fill container */
+  gap: 5px !important;
+  width: 100%;
+}
+
+.figma-form-label-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.figma-form-label {
+  font-family: var(--font-sans) !important;
+  font-style: normal !important;
+  font-weight: 500 !important;
+  font-size: 10px !important;
+  line-height: 100% !important;
+  color: var(--text-muted) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+}
+
+.figma-form-input {
+  width: 100% !important;
+  height: 45px !important;
+  background: var(--surface-subtle) !important;
+  border-radius: 16px !important;
+  padding: 0 20px !important;
+  font-family: var(--font-sans) !important;
+  font-style: normal !important;
+  font-weight: 500 !important;
+  font-size: 11px !important;
+  color: var(--text-primary) !important;
+  outline: none !important;
+  transition: background-color 0.2s !important;
+}
+
+.figma-form-input:focus {
+  background: #2e2e32 !important;
+}
+
+.figma-form-textarea {
+  width: 100% !important;
+  height: 96px !important;
+  background: var(--surface-subtle) !important;
+  border-radius: 16px !important;
+  padding: 15px 20px !important;
+  font-family: var(--font-sans) !important;
+  font-style: normal !important;
+  font-weight: 500 !important;
+  font-size: 11px !important;
+  color: var(--text-primary) !important;
+  outline: none !important;
+  resize: none !important;
+  transition: background-color 0.2s !important;
+}
+
+.figma-form-textarea:focus {
+  background: #2e2e32 !important;
+}
+
+.figma-form-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px !important;
+  width: 100%;
+}
+
+.figma-form-button-save {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  width: 188px !important;
+  height: 34px !important;
+  background: var(--brand-primary) !important;
+  border-radius: 16px !important;
+  font-family: var(--font-sans) !important;
+  font-style: normal !important;
+  font-weight: 900 !important;
+  font-size: 12px !important;
+  line-height: 100% !important;
+  color: var(--surface-page) !important;
+  text-transform: uppercase !important;
+  margin: 12px auto 0 auto !important;
+  cursor: pointer !important;
+  transition: filter 0.2s, transform 0.1s !important;
+}
+
+.figma-form-button-save:hover {
+  filter: brightness(1.1) !important;
+}
+
+.figma-form-button-save:active {
+  transform: scale(0.97) !important;
+}
+
+/* Figma Free Slot Pills */
+.figma-free-slot {
+  width: 70px !important;
+  height: 30px !important;
+  background: var(--surface-subtle) !important;
+  border-radius: 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-family: var(--font-sans) !important;
+  font-style: normal !important;
+  font-weight: 500 !important;
+  font-size: 10px !important;
+  color: var(--text-primary) !important;
+  cursor: pointer !important;
+  transition: all 0.2s !important;
+}
+
+.figma-free-slot:hover {
+  filter: brightness(1.2) !important;
+}
+
+.figma-free-slot-active {
+  background: var(--brand-primary) !important;
+  color: var(--surface-page) !important;
+  font-weight: 900 !important;
+}
+
+/* Premium Design System Resets for Native HTML Inputs */
+input,
+select,
+textarea {
+  color-scheme: dark !important; /* Forces native popups, calendars and dropdown lists to be dark */
+}
+
+/* Custom Calendar Icon for Date Input */
+input[type="date"].figma-form-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23A1A1AA' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 20px center !important;
+  background-size: 14px !important;
+  padding-right: 40px !important;
+  position: relative !important;
+}
+
+/* Custom Clock Icon for Time Input */
+input[type="time"].figma-form-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23A1A1AA' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 20px center !important;
+  background-size: 14px !important;
+  padding-right: 40px !important;
+  position: relative !important;
+}
+
+/* Hide default indicators but keep them clickable on top of our icons */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  position: absolute !important;
+  right: 10px !important;
+  top: 0 !important;
+  width: 34px !important;
+  height: 100% !important;
+  opacity: 0 !important;
+  cursor: pointer !important;
+  z-index: 10 !important;
+}
+
+/* Premium Chevron Arrow for Select inputs */
+select.figma-form-input {
+  appearance: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23A1A1AA' stroke-width='2.5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19.5 8.25l-7.5 7.5-7.5-7.5'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 20px center !important;
+  background-size: 12px !important;
+  padding-right: 40px !important;
+  cursor: pointer !important;
+}
+
+/* Premium Custom Checkbox styling */
+input[type="checkbox"] {
+  appearance: none !important;
+  width: 18px !important;
+  height: 18px !important;
+  background: var(--surface-subtle) !important;
+  border-radius: 6px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  position: relative !important;
+  transition: all 0.2s ease !important;
+}
+
+input[type="checkbox"]:checked {
+  background: var(--brand-primary) !important;
+}
+
+input[type="checkbox"]:checked::after {
+  content: "" !important;
+  width: 5px !important;
+  height: 9px !important;
+  border: solid var(--surface-page) !important;
+  border-width: 0 2.5px 2.5px 0 !important;
+  transform: rotate(45deg) !important;
+  position: absolute !important;
+  top: 2px !important;
+  left: 6px !important;
+}
+
+/* React Day Picker Custom Styling overrides */
+.rdp {
+  --rdp-cell-size: 36px !important;
+  --rdp-accent-color: var(--brand-primary) !important;
+  --rdp-background-color: var(--surface-subtle) !important;
+  margin: 0 !important;
+  color: var(--text-primary) !important;
+}
+
+.rdp-day_selected, 
+.rdp-selected,
+.rdp-day_selected:hover,
+.rdp-selected:hover {
+  background-color: #FFFFFF !important;
+  color: #09090B !important;
+  font-weight: 900 !important;
+  border-radius: 50% !important; /* Circle highlight */
+}
+
+.rdp-button:hover:not([disabled]):not(.rdp-day_selected):not(.rdp-selected) {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border-radius: 50% !important;
+}
+
+.rdp-caption_label {
+  font-size: 12px !important;
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+}
+
+.rdp-nav_button {
+  background-color: #242427 !important;
+  border-radius: 8px !important;
+  width: 28px !important;
+  height: 28px !important;
+  color: #FFFFFF !important;
+  border: none !important;
+}
+
+.rdp-nav_button svg {
+  color: #FFFFFF !important;
+  fill: none !important; /* Keep outline styled arrows */
+  stroke: #FFFFFF !important;
+}
+
+.rdp-head_cell {
+  font-size: 9px !important;
+  font-weight: 900 !important;
+  color: var(--text-muted) !important;
+  text-transform: uppercase !important;
+}
+
+/* Datepicker popover 0.8x scaling */
+.figma-datepicker-popover {
+  transform: scale(0.8) !important;
+  transform-origin: top left !important;
+  margin-top: 8px !important;
+}
+
+/* Hide native number spinners */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+}
+input[type="number"] {
+  -moz-appearance: textfield !important;
 }

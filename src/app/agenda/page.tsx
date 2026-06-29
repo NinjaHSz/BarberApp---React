@@ -1,6 +1,6 @@
 "use client";
 
-import { useClients, useProcedures } from "@/hooks/use-data";
+import { useClients, useProcedures, useBarbers } from "@/hooks/use-data";
 import { supabase } from "@/lib/supabase";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
@@ -56,6 +56,7 @@ interface Appointment {
   value: number;
   paymentMethod: string;
   isEmpty?: boolean;
+  barberId?: number;
 }
 
 // --- Components ---
@@ -324,6 +325,16 @@ export default function AgendaPage() {
   const [showCopyMenu, setShowCopyMenu] = useState(false);
   const copyMenuRef = useRef<HTMLDivElement>(null);
 
+  const { data: barbers = [] } = useBarbers();
+  const [selectedBarberId, setSelectedBarberId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (barbers.length > 0 && !selectedBarberId) {
+      const lucas = barbers.find((b: any) => b.nome?.toLowerCase() === "lucas");
+      setSelectedBarberId(lucas ? lucas.id : barbers[0].id);
+    }
+  }, [barbers, selectedBarberId]);
+
   useEffect(() => {
     if (!showCopyMenu) return;
     const handleClickOutside = (e: MouseEvent) => {
@@ -339,8 +350,6 @@ export default function AgendaPage() {
   const [editingRecord, setEditingRecord] = useState<Partial<Appointment> | null>(null);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [recordToCancel, setRecordToCancel] = useState<Appointment | null>(null);
-
-  // O ouvinte do Jarvis foi movido para depois das Mutations para evitar problemas de escopo.
 
   const queryClient = useQueryClient();
   const selectedDateStr = format(currentDate, "yyyy-MM-dd");
@@ -365,10 +374,16 @@ export default function AgendaPage() {
         service: r.procedimento || "A DEFINIR", 
         observations: r.observacoes,
         value: r.valor, 
-        paymentMethod: r.forma_pagamento
+        paymentMethod: r.forma_pagamento,
+        barberId: r.barbeiro_id
       }) as Appointment);
     }
   });
+
+  const filteredRecords = useMemo(() => {
+    if (!selectedBarberId) return records;
+    return records.filter((r: Appointment) => r.barberId !== undefined && String(r.barberId) === String(selectedBarberId));
+  }, [records, selectedBarberId]);
 
   const clientSuggestions: Suggestion<string>[] = useMemo(() => 
     clients?.map(c => ({ id: c.id, label: c.nome, value: c.nome })) || [], [clients]
@@ -395,6 +410,8 @@ export default function AgendaPage() {
       if (updates.observations !== undefined) dbUpdates.observacoes = updates.observations;
       if (updates.paymentMethod !== undefined) dbUpdates.forma_pagamento = updates.paymentMethod;
       if (updates.time !== undefined) dbUpdates.horario = updates.time;
+      if (updates.barberId !== undefined) dbUpdates.barbeiro_id = updates.barberId;
+      if (updates.date !== undefined) dbUpdates.data = updates.date;
 
       if (id.startsWith('empty-')) {
         const { data, error } = await supabase.from('agendamentos').insert({
@@ -403,13 +420,15 @@ export default function AgendaPage() {
           valor: updates.value || 0,
           forma_pagamento: updates.paymentMethod || "PIX",
           observacoes: updates.observations || "",
-          data: dateStr,
-          horario: updates.time || id.replace('empty-', '')
+          data: updates.date || dateStr,
+          horario: updates.time || id.replace('empty-', ''),
+          barbeiro_id: updates.barberId || selectedBarberId
         }).select().single();
         if (error) throw error;
         return data; // Retorna o registro criado com o ID real
       } else {
-        const { error } = await supabase.from('agendamentos').update(dbUpdates).eq('id', id);
+        const queryId = /^\d+$/.test(id) ? parseInt(id, 10) : id;
+        const { error } = await supabase.from('agendamentos').update(dbUpdates).eq('id', queryId);
         if (error) throw error;
         return null;
       }
@@ -444,131 +463,15 @@ export default function AgendaPage() {
     }
   });
 
-  // Ref para garantir que o listener do Jarvis tenha acesso aos records mais recentes sem re-registrar
-  const recordsRef = useRef<Appointment[]>(records);
+  const recordsRef = useRef<Appointment[]>(filteredRecords);
   useEffect(() => {
-    recordsRef.current = records;
-  }, [records]);
-
-  // Ref para desduplicação de comandos Jarvis (evita duplicidade em sistemas com múltiplos listeners)
-  const lastProcessedRef = useRef<{ id: string, time: number } | null>(null);
-
-  // Jarvis Integration
-  useEffect(() => {
-    const handleJarvis = (e: Event) => {
-      const customEvent = e as CustomEvent;
-      if (!customEvent.detail) return;
-      
-      const { type, payload } = customEvent.detail;
-      
-      // Deduplicação: Ignorar se o mesmo comando (mesmo cliente e hora) foi processado nos últimos 1000ms
-      const commandId = `${payload.clientName}-${payload.time}-${payload.date}`;
-      const now = Date.now();
-      if (lastProcessedRef.current && lastProcessedRef.current.id === commandId && (now - lastProcessedRef.current.time) < 1000) {
-        console.log("[JARVIS] Ignorando comando duplicado:", commandId);
-        return;
-      }
-      lastProcessedRef.current = { id: commandId, time: now };
-
-      console.log(`[JARVIS ACTION] ${type}`, payload);
-
-      const markSuccess = (title: string, slots: string[]) => {
-        setPeriodFilterName(title);
-        setCopiedSlots(slots);
-        setCopied(true);
-        setTimeout(() => { 
-          setCopied(false);
-          setLastAction(null);
-        }, 3000);
-      };
-
-      // Intent: AGENDAR (Agora processado apenas via AGENDA_OPEN vindo do Assistant global)
-      if (type === "AGENDA_OPEN") {
-        const { clientName, time, date } = payload;
-        const targetDate = date || format(currentDate, "yyyy-MM-dd");
-        
-        if (targetDate !== format(currentDate, "yyyy-MM-dd")) {
-          setCurrentDate(parse(targetDate, "yyyy-MM-dd", new Date()));
-        }
-
-        const formData = {
-          time: time || "08:00",
-          date: targetDate,
-          client: clientName || "",
-          service: "A DEFINIR",
-          paymentMethod: "PIX",
-          value: 0,
-          observations: "Agendado via Jarvis"
-        };
-
-        if (clientName && time) {
-           console.log("[JARVIS] Executando inserção direta:", formData);
-           // Não setamos lastAction aqui, deixamos o onSuccess da mutation capturar o ID real
-           updateMutation.mutate({ id: `empty-${time}`, updates: formData, dateStr: targetDate });
-           markSuccess("Agenda Criada", [`${time} — ${clientName.toUpperCase()}`]);
-        } else {
-           console.log("[JARVIS] Dados insuficientes para salvar direto, abrindo modal.");
-           setEditingRecord(formData);
-           setIsModalOpen(true);
-        }
-      }
-
-      // Intent: EDITAR / DELETAR
-      if (type === "JARVIS_CHAT_COMMAND") {
-        const { intent, clientName, id, updates } = payload;
-        if (intent !== "editar" && intent !== "deletar") return;
-
-        let targetId = id;
-        if (!targetId && clientName) {
-          const searchName = clientName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-          const match = recordsRef.current.find((r: Appointment) => {
-            const rName = r.client.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            return rName.includes(searchName) || searchName.includes(rName);
-          });
-          if (match) targetId = match.id;
-        }
-
-        if (intent === "deletar" && targetId) {
-          const match = recordsRef.current.find(r => r.id === targetId);
-          if (match) {
-            setLastAction({ type: "cancelar", data: match });
-            cancelMutation.mutate({ id: targetId });
-            markSuccess("Cancelado", [`${match.time} — ${match.client.toUpperCase()}`]);
-          }
-        } else if (intent === "editar" && targetId && updates) {
-          const match = recordsRef.current.find(r => r.id === targetId);
-          if (match) {
-             setLastAction({ type: "editar", data: { ...match } });
-             const cleanUpdates: Partial<Appointment> = {};
-             if (updates.time) cleanUpdates.time = updates.time;
-             if (updates.clientName) cleanUpdates.client = updates.clientName;
-             if (updates.service) cleanUpdates.service = updates.service;
-             updateMutation.mutate({ id: targetId, updates: cleanUpdates, dateStr: selectedDateStr });
-             markSuccess("Editado", [`${match.time} → ${updates.time || match.time}`]);
-          }
-        } else if ((intent === "editar" || intent === "deletar") && !targetId) {
-          console.warn("[JARVIS] Registro não encontrado para ação:", clientName);
-          setPeriodFilterName("Não encontrado");
-          setCopiedSlots([clientName?.toUpperCase() || "CLIENTE"]);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 3000);
-        }
-      }
-    };
-
-    window.addEventListener("jarvis-action", handleJarvis);
-    window.addEventListener("jarvis-undo", handleUndo);
-    return () => {
-      window.removeEventListener("jarvis-action", handleJarvis);
-      window.removeEventListener("jarvis-undo", handleUndo);
-    };
-  }, [supabase, queryClient, cancelMutation, updateMutation, lastAction, currentDate, selectedDateStr]);
+    recordsRef.current = filteredRecords;
+  }, [filteredRecords]);
 
   const handleUndo = async () => {
     if (!lastAction) return;
 
     if (lastAction.type === "agendar") {
-       // Mira de Precisão: Deletar exatamente o ID que foi criado
        if (lastAction.data.id) {
          await supabase.from('agendamentos').delete().eq('id', lastAction.data.id);
        }
@@ -634,7 +537,7 @@ export default function AgendaPage() {
 
   const slots = useMemo(() => {
     if (deferredSearchTerm) {
-      return records.filter((r: Appointment) =>
+      return filteredRecords.filter((r: Appointment) =>
         r.client.toLowerCase().includes(deferredSearchTerm.toLowerCase()) ||
         r.service.toLowerCase().includes(deferredSearchTerm.toLowerCase())
       );
@@ -643,7 +546,7 @@ export default function AgendaPage() {
     const dayEndMin = 20 * 60 + 40;
     const slotDuration = 40;
     const result: Appointment[] = [];
-    const unhandledRecords = [...records];
+    const unhandledRecords = [...filteredRecords];
     let currentMin = dayStartMin;
 
     while (currentMin <= dayEndMin) {
@@ -668,7 +571,7 @@ export default function AgendaPage() {
       if (!consumed) {
         const h = Math.floor(currentMin / 60); const m = currentMin % 60;
         const timeStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-        result.push({ id: `empty-${timeStr}`, time: timeStr, date: selectedDateStr, client: "---", service: "A DEFINIR", value: 0, paymentMethod: "PIX", isEmpty: true });
+        result.push({ id: `empty-${timeStr}`, time: timeStr, date: selectedDateStr, client: "---", service: "A DEFINIR", value: 0, paymentMethod: "PIX", isEmpty: true, barberId: selectedBarberId ? Number(selectedBarberId) : undefined });
       }
 
       currentMin += slotDuration;
@@ -679,7 +582,7 @@ export default function AgendaPage() {
     const final = result.sort((a, b) => a.time.localeCompare(b.time));
 
     return showEmptySlots ? final : final.filter(r => !r.isEmpty);
-  }, [records, deferredSearchTerm, showEmptySlots, selectedDateStr]);
+  }, [filteredRecords, deferredSearchTerm, showEmptySlots, selectedDateStr, selectedBarberId]);
 
   const handleDayChange = useCallback((delta: number) => setCurrentDate(prev => delta > 0 ? addDays(prev, delta) : subDays(prev, Math.abs(delta))), []);
   const handleDaySelect = useCallback((day: number) => { setCurrentDate(prev => { const d = new Date(prev); d.setDate(day); return d; }); }, []);
@@ -786,135 +689,177 @@ export default function AgendaPage() {
 
   return (
     <div className="px-4 py-8 md:px-8 pb-32 space-y-6 animate-in fade-in slide-in-from-right-4 duration-500 max-w-7xl mx-auto min-h-screen">
-      <div className="flex flex-row justify-between items-center gap-2">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <div className="flex items-center bg-surface-section rounded-2xl p-0.5 shrink-0">
-            <button onClick={() => handleDayChange(-1)} className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-white transition-colors border-none"><ChevronLeft size={14} /></button>
-            <PremiumSelector value={currentDate.getDate()} options={dayOptions} onSelect={handleDaySelect} className="bg-transparent !px-2 !py-1.5 w-[85px]" />
-            <button onClick={() => handleDayChange(1)} className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-white transition-colors border-none"><ChevronRight size={14} /></button>
+      {/* Header and Search/Controls Row */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        {/* Title & Date Selectors */}
+        <div className="flex flex-wrap items-center gap-4 shrink-0">
+          <div>
+            <h2 className="text-text-primary text-3xl font-black tracking-tight uppercase italic leading-none">Agenda</h2>
+            <p className="text-text-secondary text-[8px] font-black uppercase tracking-widest mt-1">Sincronização Ativa</p>
           </div>
-          <div className="flex items-center bg-surface-section rounded-2xl p-0.5 shrink-0"><PremiumSelector value={currentDate.getMonth() + 1} options={monthOptions} onSelect={handleMonthSelect} className="bg-transparent !px-3 !py-1.5 min-w-[70px]" /></div>
-          <div className="flex items-center bg-surface-section rounded-2xl p-0.5 shrink-0"><PremiumSelector value={currentDate.getFullYear()} options={yearOptions} onSelect={handleYearSelect} className="bg-transparent !px-3 !py-1.5 min-w-[55px]" /></div>
-          
-          <button 
-            onClick={handleSync} 
-            className={cn(
-              "w-9 h-9 rounded-2xl bg-surface-section hover:bg-surface-subtle transition-all flex items-center justify-center border-none shrink-0 ml-0.5", 
-              isSyncing && "animate-spin"
-            )}
-          >
-            <RefreshCw size={14} className="text-text-primary" />
-          </button>
-        </div>
 
-        <div className="hidden md:flex items-center gap-3">
-          <h1 className="text-sm font-black text-brand-primary italic tracking-tighter opacity-80 uppercase font-display">LUCAS DO CORTE</h1>
-        </div>
-      </div>
-
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mt-8">
-        <div><h2 className="text-text-primary text-3xl font-bold">Agenda</h2><p className="text-text-secondary text-sm mt-1">Sincronização Ativa</p></div>
-        <div className="relative flex flex-row gap-2 items-center w-full md:w-auto">
-          <button onClick={() => openAddModal("08:00")} className="flex items-center justify-center w-12 h-12 md:w-10 md:h-10 rounded-full bg-brand-primary text-surface-page hover:scale-110 transition-all shadow-lg shadow-brand-primary/50 shrink-0 border-none"><Plus size={20} /></button>
-          
-          <div className="relative flex items-center">
-            {/* Botão de Trigger / Cópia principal */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center bg-surface-section rounded-2xl p-0.5 shrink-0">
+              <button onClick={() => handleDayChange(-1)} className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-white transition-colors border-none"><ChevronLeft size={14} /></button>
+              <PremiumSelector value={currentDate.getDate()} options={dayOptions} onSelect={handleDaySelect} className="bg-transparent !px-2 !py-1.5 w-[85px]" />
+              <button onClick={() => handleDayChange(1)} className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-white transition-colors border-none"><ChevronRight size={14} /></button>
+            </div>
+            <div className="flex items-center bg-surface-section rounded-2xl p-0.5 shrink-0"><PremiumSelector value={currentDate.getMonth() + 1} options={monthOptions} onSelect={handleMonthSelect} className="bg-transparent !px-3 !py-1.5 min-w-[70px]" /></div>
+            <div className="flex items-center bg-surface-section rounded-2xl p-0.5 shrink-0"><PremiumSelector value={currentDate.getFullYear()} options={yearOptions} onSelect={handleYearSelect} className="bg-transparent !px-3 !py-1.5 min-w-[55px]" /></div>
+            
             <button 
-              onClick={() => setShowCopyMenu(!showCopyMenu)} 
+              onClick={handleSync} 
               className={cn(
-                 "flex items-center justify-center w-12 h-12 md:w-10 md:h-10 rounded-xl border-none bg-surface-section/50 transition-all shrink-0 hover:text-brand-primary",
-                 (copied || showCopyMenu) ? "text-brand-primary" : "text-text-secondary"
+                "w-9 h-9 rounded-2xl bg-surface-section hover:bg-surface-subtle transition-all flex items-center justify-center border-none shrink-0 ml-0.5", 
+                isSyncing && "animate-spin"
               )}
-              title="Copiar Agenda"
             >
-              {copied ? <Check size={18} /> : <Copy size={18} />}
+              <RefreshCw size={14} className="text-text-primary" />
+            </button>
+          </div>
+        </div>
+
+        {/* Toolbar: Search, Eye, Copy, Barber Tabs, Add */}
+        <div className="flex flex-wrap items-center gap-3 flex-1 xl:justify-end">
+          {/* Search Box & Controls Group */}
+          <div className="flex flex-wrap gap-2 items-center bg-surface-section/30 p-2 rounded-2xl border-none shadow-2xl flex-1 max-w-xl">
+            {/* Search Input */}
+            <div className="flex-1 min-w-[150px] relative group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-primary transition-colors z-10" size={14} />
+              <input 
+                value={searchTerm} 
+                onChange={e => setSearchTerm(e.target.value)} 
+                placeholder="Pesquisar..." 
+                className="w-full bg-surface-page/50 border-none pl-9 pr-3 h-9 rounded-xl outline-none focus:bg-surface-page/80 transition-all font-bold text-[10px] uppercase text-white shadow-inner" 
+              />
+            </div>
+
+            {/* Toggle Empty Slots */}
+            <button 
+              onClick={() => setShowEmptySlots(!showEmptySlots)} 
+              className={cn(
+                "p-1.5 rounded-lg transition-all border-none cursor-pointer", 
+                showEmptySlots ? "bg-brand-primary text-surface-page" : "text-text-muted hover:text-white"
+              )}
+              title={showEmptySlots ? "Ocultar Horários Vazios" : "Mostrar Horários Vazios"}
+            >
+              {showEmptySlots ? <EyeOff size={14} /> : <Eye size={14} />}
             </button>
 
-            {/* Menu Dropdown de Período */}
-            {showCopyMenu && (
-              <div 
-                ref={copyMenuRef}
-                className="absolute left-1/2 -translate-x-1/2 top-full mt-2 bg-surface-section border border-white/5 rounded-2xl p-2 shadow-2xl z-[120] flex flex-row gap-1 min-w-max animate-in fade-in zoom-in-95 duration-200"
+            {/* Copy Schedule */}
+            <div className="relative flex items-center">
+              <button 
+                onClick={() => setShowCopyMenu(!showCopyMenu)} 
+                className={cn(
+                   "p-1.5 rounded-lg border-none transition-all cursor-pointer",
+                   (copied || showCopyMenu) ? "bg-brand-primary text-surface-page" : "text-text-muted hover:text-white"
+                )}
+                title="Copiar Agenda"
               >
-                {periodOptions.map(opt => (
-                  <button
-                    key={opt.value}
-                    onClick={() => {
-                      setShowCopyMenu(false);
-                      handleCopySchedule(opt.value);
-                    }}
-                    className="flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-text-secondary hover:bg-white/5 hover:text-white transition-all border-none"
-                  >
-                    <opt.icon size={16} className="text-text-muted" />
-                    <span>{opt.label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            
-            {/* Alerta de Cópia - FIXED BOTTOM (Igual ao Mockup) */}
-            <AnimatePresence>
-              {copied && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 100, x: "-50%" }}
-                  animate={{ opacity: 1, y: 0, x: "-50%" }}
-                  exit={{ opacity: 0, y: 100, x: "-50%" }}
-                  transition={{ type: "spring", damping: 25, stiffness: 200, ease: "easeInOut" }}
-                  className="fixed bottom-28 md:bottom-12 left-1/2 bg-surface-section border border-white/5 rounded-[1.5rem] p-5 shadow-[0_30px_60px_rgba(0,0,0,0.9)] z-[999] min-w-[280px] max-w-[90vw] overflow-hidden"
+                {copied ? <Check size={14} /> : <Copy size={14} />}
+              </button>
+
+              {showCopyMenu && (
+                <div 
+                  ref={copyMenuRef}
+                  className="absolute right-0 top-full mt-2 bg-surface-section border border-white/5 rounded-2xl p-2 shadow-2xl z-[120] flex flex-row gap-1 min-w-max animate-in fade-in zoom-in-95 duration-200"
                 >
-                <div className="flex items-center gap-3">
-                  {/* Left Icon with Glow */}
-                  <div className="relative shrink-0">
-                    <div className="absolute inset-0 bg-white/20 blur-xl rounded-full" />
-                    <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-black relative shadow-[0_0_15px_rgba(255,255,255,0.3)]">
-                      <Check size={20} strokeWidth={4} />
-                    </div>
-                  </div>
-
-                  {/* Header Text */}
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[8px] font-black uppercase tracking-[0.2em] text-text-muted">Sucesso</span>
-                    <h4 className="text-lg font-black text-white leading-tight">{periodFilterName}</h4>
-                  </div>
-
-                  {lastAction && (
-                    <button 
-                      onClick={handleUndo}
-                      className="ml-auto bg-brand-primary text-black h-10 px-4 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-widest hover:scale-105 active:scale-95 transition-all border-none"
+                  {periodOptions.map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => {
+                        setShowCopyMenu(false);
+                        handleCopySchedule(opt.value);
+                      }}
+                      className="flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-text-secondary hover:bg-white/5 hover:text-white transition-all border-none cursor-pointer"
                     >
-                      <RotateCcw size={14} strokeWidth={3} /> Rebobinar
+                      <opt.icon size={16} className="text-text-muted" />
+                      <span>{opt.label}</span>
                     </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Barber Selection Tabs inline */}
+          {barbers.length > 0 && (
+            <div className="flex bg-surface-section/30 p-1 rounded-[1.25rem] w-fit gap-1 border-none shadow-inner shrink-0">
+              {barbers.map((barber) => (
+                <button
+                  key={barber.id}
+                  onClick={() => setSelectedBarberId(barber.id)}
+                  className={cn(
+                    "w-9 h-9 flex items-center justify-center text-[10px] font-black uppercase rounded-xl transition-all border-none cursor-pointer",
+                    selectedBarberId === barber.id
+                      ? "bg-brand-primary text-surface-page shadow-md"
+                      : "text-text-secondary hover:text-white hover:bg-white/5"
                   )}
-                </div>
+                  title={barber.nome}
+                >
+                  {barber.nome ? barber.nome.split(' ').map((n: any) => n[0]).join('').toUpperCase() : ''}
+                </button>
+              ))}
+            </div>
+          )}
 
-                {/* Hours horizontal list (The Pill) */}
-                <div className="mt-4 bg-[#0c0c0e] rounded-[1rem] py-2.5 px-4 border border-white/5 shadow-inner">
-                   <p className="text-[9px] font-black text-white/70 tracking-[0.1em] text-center whitespace-nowrap overflow-hidden text-ellipsis">
-                    {copiedSlots.join(" - ")}
-                   </p>
-                </div>
-
-                {/* Progress Bar (Contagem Regressiva) */}
-                <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/5">
-                  <motion.div 
-                    initial={{ width: "100%" }}
-                    animate={{ width: "0%" }}
-                    transition={{ duration: 3, ease: "linear" }}
-                    className="h-full bg-brand-primary"
-                  />
-                </div>
-              </motion.div>
-            )}
-            </AnimatePresence>
-          </div>
-
-          <button onClick={() => setShowEmptySlots(!showEmptySlots)} className={cn("flex items-center justify-center w-12 h-12 md:w-10 md:h-10 rounded-xl border-none bg-surface-section/50 transition-all shrink-0", showEmptySlots ? "text-brand-primary" : "text-text-secondary")}>{showEmptySlots ? <EyeOff size={18} /> : <Eye size={18} />}</button>
-          <div className="relative group flex items-center">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-primary transition-colors z-10" size={16} />
-            <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Pesquisar..." className="bg-surface-section/50 border-none rounded-2xl pl-12 pr-4 py-3 md:py-2 text-sm text-text-primary outline-none focus:ring-1 focus:ring-brand-primary/30 w-full md:w-[220px] font-medium transition-all" />
-          </div>
+          {/* Plus Add button next to search/tabs */}
+          <button 
+            onClick={() => openAddModal("08:00")} 
+            className="w-10 h-10 bg-brand-primary text-surface-page rounded-2xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg shadow-brand-primary/10 border-none shrink-0 cursor-pointer"
+            title="Novo Agendamento"
+          >
+            <Plus size={18} />
+          </button>
+        </div>
       </div>
-      </div>
+
+      {/* Alerta de Cópia - FIXED BOTTOM */}
+      <AnimatePresence>
+        {copied && (
+          <motion.div 
+            initial={{ opacity: 0, y: 100, x: "-50%" }}
+            animate={{ opacity: 1, y: 0, x: "-50%" }}
+            exit={{ opacity: 0, y: 100, x: "-50%" }}
+            transition={{ type: "spring", damping: 25, stiffness: 200, ease: "easeInOut" }}
+            className="fixed bottom-28 md:bottom-12 left-1/2 bg-surface-section border border-white/5 rounded-[1.5rem] p-5 shadow-[0_30px_60px_rgba(0,0,0,0.9)] z-[999] min-w-[280px] max-w-[90vw] overflow-hidden"
+          >
+            <div className="flex items-center gap-3">
+              <div className="relative shrink-0">
+                <div className="absolute inset-0 bg-white/20 blur-xl rounded-full" />
+                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-black relative shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+                  <Check size={20} strokeWidth={4} />
+                </div>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[8px] font-black uppercase tracking-[0.2em] text-text-muted">Sucesso</span>
+                <h4 className="text-lg font-black text-white leading-tight">{periodFilterName}</h4>
+              </div>
+              {lastAction && (
+                <button 
+                  onClick={handleUndo}
+                  className="ml-auto bg-brand-primary text-black h-10 px-4 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-widest hover:scale-105 active:scale-95 transition-all border-none cursor-pointer"
+                >
+                  <RotateCcw size={14} strokeWidth={3} /> Rebobinar
+                </button>
+              )}
+            </div>
+            <div className="mt-4 bg-[#0c0c0e] rounded-[1rem] py-2.5 px-4 border border-white/5 shadow-inner">
+               <p className="text-[9px] font-black text-white/70 tracking-[0.1em] text-center whitespace-nowrap overflow-hidden text-ellipsis">
+                {copiedSlots.join(" - ")}
+               </p>
+            </div>
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/5">
+              <motion.div 
+                initial={{ width: "100%" }}
+                animate={{ width: "0%" }}
+                transition={{ duration: 3, ease: "linear" }}
+                className="h-full bg-brand-primary"
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="space-y-4 md:space-y-0 md:bg-surface-section/30 md:rounded-[2rem] border-none overflow-visible mt-6 shadow-2xl shadow-black/20">
         <div className="hidden md:grid md:grid-cols-[80px_1.5fr_1.2fr_1fr_100px_130px_100px] gap-4 bg-white/[0.02] border-none px-6 py-5 text-[10px] font-black text-text-secondary uppercase tracking-widest items-center rounded-t-[2rem]">
@@ -983,9 +928,8 @@ export default function AgendaPage() {
         title="Cancelar Horário"
         subtitle="Confirma o cancelamento?"
         icon={<Trash2 size={18} className="text-rose-500" />}
-        className="max-w-md"
       >
-        <div className="space-y-4">
+        <div className="flex flex-col gap-3 py-2">
           <div className="bg-rose-500/5 p-5 rounded-[1.2rem] border border-rose-500/10 text-center">
             <h4 className="text-lg font-black text-white uppercase italic">
               {recordToCancel?.time.substring(0, 5)} — {recordToCancel?.client.toUpperCase()}
@@ -995,20 +939,12 @@ export default function AgendaPage() {
             </p>
           </div>
 
-          <div className="flex gap-2">
-            <button
-              onClick={() => setIsCancelModalOpen(false)}
-              className="flex-1 bg-surface-section text-white font-black py-3 rounded-xl border-none uppercase tracking-widest text-[10px] hover:bg-surface-subtle transition-all"
-            >
-              Manter
-            </button>
-            <button
-              onClick={confirmCancel}
-              className="flex-1 bg-rose-500 text-white font-black py-3 rounded-xl border-none uppercase tracking-widest text-[10px] shadow-lg shadow-rose-500/10 hover:brightness-110 transition-all active:scale-[0.98]"
-            >
-              Confirmar
-            </button>
-          </div>
+          <button
+            onClick={confirmCancel}
+            className="figma-form-button-save border-none"
+          >
+            Confirmar
+          </button>
         </div>
       </Modal>
     </div>

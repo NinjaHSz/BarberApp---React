@@ -31,36 +31,33 @@ export function Modal({ isOpen, onClose, title, subtitle, icon, children, classN
     <AnimatePresence>
       {isOpen && (
         <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+          <div 
             onClick={onClose}
-            className="fixed inset-0 bg-black/75 z-[1000]"
-          />
-          <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-[1001] p-4">
+            className="fixed inset-0 flex items-center justify-center z-[1001] p-4 bg-transparent cursor-default"
+          >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
               className={cn(
-                "w-full max-w-lg bg-surface-section rounded-[2.5rem] shadow-2xl pointer-events-auto flex flex-col border-none max-h-[90vh]",
+                "figma-modal shadow-2xl",
                 className
               )}
             >
-              <div className="sticky top-0 z-10 flex items-center justify-between px-8 py-6 bg-surface-section border-none">
-                <div className="flex items-center gap-4">
+              <div className="figma-modal-header shrink-0">
+                <div className="flex items-center gap-3">
                   {icon && (
                     <div className="w-10 h-10 rounded-xl bg-brand-primary/10 flex items-center justify-center text-brand-primary shrink-0">
                       {icon}
                     </div>
                   )}
                   <div className="flex flex-col">
-                    <h2 className="text-xl font-black text-white uppercase tracking-tighter italic leading-none">
+                    <h2 className="figma-modal-title">
                       {title}
                     </h2>
                     {subtitle && (
-                      <p className="text-[10px] text-text-muted font-black uppercase tracking-widest mt-1">
+                      <p className="text-[10px] text-text-muted font-bold uppercase tracking-widest mt-1">
                         {subtitle}
                       </p>
                     )}
@@ -68,12 +65,12 @@ export function Modal({ isOpen, onClose, title, subtitle, icon, children, classN
                 </div>
                 <button
                   onClick={onClose}
-                  className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-text-muted hover:text-white transition-all border-none"
+                  className="figma-modal-close border-none"
                 >
-                  <X size={20} />
+                  <X size={16} strokeWidth={3} />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto custom-scroll px-8 pb-10">
+              <div className="flex-1 overflow-y-auto custom-scroll w-full pr-1">
                 {children}
               </div>
             </motion.div>

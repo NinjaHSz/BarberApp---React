@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useClients, useSupabase } from "@/hooks/use-data";
 import { Plus, Search, Users, Clock, Banknote, RotateCcw, Pause, Edit2, Play, Crown, XCircle } from "lucide-react";
@@ -152,57 +152,42 @@ export default function PlansPage() {
   }
 
   return (
-    <div className="px-4 pt-6 sm:px-8 sm:pt-6 space-y-8 animate-in fade-in duration-500 pb-32 max-w-7xl mx-auto">
-      {/* Header & KPIs */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-        <div className="space-y-1">
-          <h2 className="text-4xl md:text-3xl font-black tracking-tight text-text-primary uppercase italic">
-            Gestão de Planos <span className="text-text-secondary font-medium lowercase">({clientsWithPlans.length})</span>
-          </h2>
-          <p className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em]">Retenção e Fidelidade VIP</p>
+    <div className="px-4 pt-6 sm:px-8 sm:pt-6 space-y-6 animate-in fade-in duration-500 pb-32 max-w-7xl mx-auto">
+      {/* Header and Search/Controls Row */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        <div className="flex items-center gap-4 shrink-0">
+          <div>
+            <h2 className="text-3xl font-black tracking-tight text-text-primary uppercase italic leading-none">
+              Gestão de Planos <span className="text-text-secondary font-medium lowercase">({clientsWithPlans.length})</span>
+            </h2>
+            <p className="text-[8px] font-black text-text-muted uppercase tracking-[0.2em] mt-1">Retenção e Fidelidade VIP</p>
+          </div>
         </div>
 
-        <div className="flex flex-wrap gap-4 w-full md:w-auto">
-           <div className="bg-surface-section/50 px-6 py-4 rounded-[2rem] flex items-center gap-4 border-none shadow-xl">
-              <div className="w-10 h-10 rounded-xl bg-brand-primary/5 flex items-center justify-center text-brand-primary"><Users size={18} /></div>
-              <div>
-                <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Ativos</p>
-                <h3 className="text-lg font-black text-white leading-none mt-1">{stats.active}</h3>
-              </div>
-           </div>
-           <div className="bg-surface-section/50 px-6 py-4 rounded-[2rem] flex items-center gap-4 border-none shadow-xl">
-              <div className="w-10 h-10 rounded-xl bg-brand-primary/5 flex items-center justify-center text-text-muted"><Clock size={18} /></div>
-              <div>
-                <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Pendentes</p>
-                <h3 className="text-lg font-black text-white leading-none mt-1">{stats.pending}</h3>
-              </div>
-           </div>
-           <button
+        {/* Controls Container */}
+        <div className="flex flex-wrap items-center gap-3 flex-1 xl:justify-end">
+          {/* Search Box */}
+          <div className="flex flex-wrap gap-2 items-center bg-surface-section/30 p-2 rounded-2xl border-none shadow-2xl flex-1 max-w-xl">
+            <div className="flex-1 min-w-[200px] relative group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-primary transition-colors" size={14} />
+              <input
+                type="text"
+                placeholder="Buscar por nome do assinante..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-surface-page/50 border-none pl-9 pr-3 h-9 rounded-xl outline-none focus:bg-surface-page/80 transition-all font-bold text-[10px] uppercase text-white shadow-inner"
+              />
+            </div>
+          </div>
+
+          {/* Cadastrar button as a small square next to search */}
+          <button
             onClick={() => setIsModalOpen(true)}
-            className="bg-brand-primary text-surface-page px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:brightness-110 transition-all flex items-center gap-2 shadow-xl shadow-brand-primary/10 border-none justify-center"
+            className="w-10 h-10 bg-brand-primary text-surface-page rounded-2xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg shadow-brand-primary/10 border-none shrink-0 cursor-pointer"
+            title="Novo Assinante"
           >
-            <Plus size={16} /> Novo Assinante
+            <Plus size={18} />
           </button>
-        </div>
-      </div>
-
-      {/* Search & Metrics Summary */}
-      <div className="flex flex-wrap gap-4 items-center bg-surface-section/30 p-4 rounded-[1.5rem] border-none shadow-2xl">
-        <div className="flex-1 min-w-[240px] relative group w-full">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-primary transition-colors" size={16} />
-          <input
-            type="text"
-            placeholder="Buscar por nome do assinante..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-surface-page/50 border-none pl-12 pr-4 h-11 rounded-2xl outline-none focus:bg-surface-page/80 transition-all font-bold text-xs uppercase text-white shadow-inner"
-          />
-        </div>
-        <div className="px-6 py-3 bg-brand-primary/10 rounded-2xl flex flex-col justify-center border-none">
-          <span className="text-[8px] font-black uppercase text-brand-primary/60 tracking-widest">Receita MensalEstimada (MRR)</span>
-          <span className="text-lg font-black text-brand-primary tabular-nums">
-            R$ {stats.mrr.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}
-          </span>
         </div>
       </div>
 
@@ -329,42 +314,42 @@ export default function PlansPage() {
             valor_plano: parseFloat(String(formData.get("valor_plano"))) || 0,
           };
           saveMutation.mutate(data);
-        }} className="space-y-6">
-          <div className="space-y-1">
-            <label className="text-[9px] font-black uppercase text-text-muted tracking-widest ml-1">Cliente</label>
+        }} className="flex flex-col gap-3 py-2 w-full">
+          <div className="figma-form-group">
+            <label className="figma-form-label">Cliente</label>
             <AutocompleteInput
               value={editingPlan?.nome || ""}
               onChange={(v) => setEditingPlan((prev: any) => ({ ...prev, nome: v }))}
               suggestions={clients.map(c => ({ id: c.nome, label: c.nome, value: c }))}
               onSelect={(v) => setEditingPlan((prev: any) => ({ ...prev, nome: v.label }))}
               placeholder="BUSCAR OU DIGITAR NOME..."
-              inputClassName="bg-surface-page/50 font-bold uppercase"
+              inputClassName="figma-form-input font-bold uppercase"
             />
             <input type="hidden" name="nome" value={editingPlan?.nome || ""} />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="text-[9px] font-black uppercase text-text-muted tracking-widest ml-1">Modalidade</label>
-              <select name="plano" className="w-full bg-surface-page/50 border-none p-4 rounded-2xl outline-none font-black uppercase text-xs appearance-none">
-                <option value="Mensal" className="bg-surface-section px-4">Plano Mensal</option>
-                <option value="Semestral" className="bg-surface-section px-4">Plano Semestral</option>
-                <option value="Anual" className="bg-surface-section px-4">Plano Anual</option>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="figma-form-group">
+              <label className="figma-form-label">Modalidade</label>
+              <select name="plano" className="figma-form-input font-bold uppercase appearance-none">
+                <option value="Mensal" className="bg-[#18181B] px-4">Plano Mensal</option>
+                <option value="Semestral" className="bg-[#18181B] px-4">Plano Semestral</option>
+                <option value="Anual" className="bg-[#18181B] px-4">Plano Anual</option>
               </select>
             </div>
-            <div className="space-y-1">
-              <label className="text-[9px] font-black uppercase text-text-muted tracking-widest ml-1">Cortes no Ciclo</label>
-              <input type="number" name="limite_cortes" defaultValue={99} className="w-full bg-surface-page/50 border-none p-4 rounded-2xl outline-none font-black text-sm" />
+            <div className="figma-form-group">
+              <label className="figma-form-label">Cortes no Ciclo</label>
+              <input type="number" name="limite_cortes" defaultValue={99} className="figma-form-input font-bold" />
             </div>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-[9px] font-black uppercase text-text-muted tracking-widest ml-1">Valor do Plano (R$)</label>
-            <input type="number" step="0.01" name="valor_plano" placeholder="0,00" required className="w-full bg-surface-page/50 border-none p-4 rounded-2xl outline-none font-black text-xl text-brand-primary" />
+          <div className="figma-form-group">
+            <label className="figma-form-label">Valor do Plano (R$)</label>
+            <input type="number" step="0.01" name="valor_plano" placeholder="0,00" required className="figma-form-input font-bold" />
           </div>
 
-          <button type="submit" disabled={saveMutation.isPending} className="w-full bg-brand-primary text-surface-page font-black py-4 rounded-2xl border-none uppercase tracking-widest text-xs shadow-xl shadow-brand-primary/10 transition-all active:scale-[0.98]">
-            {saveMutation.isPending ? "Processando..." : "Ativar Assinatura"}
+          <button type="submit" disabled={saveMutation.isPending} className="figma-form-button-save border-none">
+            {saveMutation.isPending ? "Processando..." : "Salvar"}
           </button>
         </form>
       </Modal>

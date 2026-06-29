@@ -1,11 +1,15 @@
 "use client";
 
-import { useState, useCallback, memo, useRef, useEffect } from "react";
+import { useState, useCallback, memo, useRef, useEffect, useMemo } from "react";
 import { Search, Calendar, Clock, Coffee, Copy, Sun, Sunset, Moon, List, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 import { AutocompleteInput, type Suggestion } from "@/components/shared/autocomplete-input";
+import { cn } from "@/lib/utils";
 import { PaymentSelector } from "@/components/shared/payment-selector";
 import { supabase } from "@/lib/supabase";
+import { DayPicker } from "react-day-picker";
+import { TimeField, DateInput, DateSegment } from "react-aria-components";
+import { Time } from "@internationalized/date";
 
 interface AppointmentRecord {
   id?: string;
@@ -48,18 +52,70 @@ export const AppointmentForm = memo(function AppointmentForm({
 }: AppointmentFormProps) {
   const [form, setForm] = useState<AppointmentRecord>(initial);
   const [showPeriodPicker, setShowPeriodPicker] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  
+  const [calendarDate, setCalendarDate] = useState(() => {
+    if (initial.date) {
+      const [y, m, d] = initial.date.split("-").map(Number);
+      return new Date(y, m - 1, d);
+    }
+    return new Date();
+  });
+
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const datePickerRef = useRef<HTMLDivElement>(null);
+  const timePickerRef = useRef<HTMLDivElement>(null);
+
+  // Sync state if form date changes from outside (e.g. autofill or suggestions)
+  useEffect(() => {
+    if (form.date) {
+      const [y, m, d] = form.date.split("-").map(Number);
+      setCalendarDate(new Date(y, m - 1, d));
+    }
+  }, [form.date]);
 
   useEffect(() => {
-    if (!showPeriodPicker) return;
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setShowPeriodPicker(false);
       }
+      if (datePickerRef.current && !datePickerRef.current.contains(e.target as Node)) {
+        setShowDatePicker(false);
+      }
+      if (timePickerRef.current && !timePickerRef.current.contains(e.target as Node)) {
+        setShowTimePicker(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showPeriodPicker]);
+  }, []);
+
+  const hoursList = useMemo(() => {
+    const list = [];
+    for (let h = 7; h <= 22; h++) {
+      const padH = String(h).padStart(2, "0");
+      list.push(`${padH}:00`);
+      list.push(`${padH}:30`);
+    }
+    return list;
+  }, []);
+
+  const calendarDays = useMemo(() => {
+    const year = calendarDate.getFullYear();
+    const month = calendarDate.getMonth();
+    const firstDayIndex = new Date(year, month, 1).getDay();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+
+    const days = [];
+    for (let i = 0; i < firstDayIndex; i++) {
+      days.push(null);
+    }
+    for (let i = 1; i <= totalDays; i++) {
+      days.push(new Date(year, month, i));
+    }
+    return days;
+  }, [calendarDate]);
 
   const set = useCallback(<K extends keyof AppointmentRecord>(key: K, value: AppointmentRecord[K]) => {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -193,83 +249,141 @@ export const AppointmentForm = memo(function AppointmentForm({
   }, [freeSlots, currentDate, onCopy]);
 
   return (
-    <div className="space-y-5 py-4">
+    <div className="flex flex-col gap-3 py-2 w-full">
       {/* Cliente */}
-      <div className="space-y-1">
-        <div className="flex justify-between items-center mb-1">
-          <label className="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">Cliente</label>
+      <div className="figma-form-group">
+        <div className="figma-form-label-row">
+          <label className="figma-form-label">Cliente</label>
           <button
             type="button"
             onClick={handleSetBreak}
-            className="text-[10px] font-black uppercase tracking-widest text-brand-primary hover:text-white transition-all flex items-center gap-1.5 border-none bg-transparent h-auto p-0"
+            className="text-[10px] font-bold uppercase tracking-wider text-brand-primary hover:text-white transition-all flex items-center gap-1 border-none bg-transparent h-auto p-0 cursor-pointer"
           >
-            <Coffee size={12} /> Marcar como Pausa
+            <Coffee size={12} /> Pausa
           </button>
         </div>
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted z-10" size={16} />
-          <AutocompleteInput
-            value={form.client || ""}
-            onChange={val => set("client", val)}
-            onSelect={handleSelectClient}
-            suggestions={clientSuggestions}
-            placeholder="Digite o nome do cliente..."
-            className="pl-0"
-            inputClassName="uppercase font-bold pl-12 bg-surface-subtle"
-          />
-        </div>
+        <AutocompleteInput
+          value={form.client || ""}
+          onChange={val => set("client", val)}
+          onSelect={handleSelectClient}
+          suggestions={clientSuggestions}
+          placeholder="Digite o nome do cliente..."
+          inputClassName="uppercase font-bold figma-form-input"
+        />
       </div>
 
       {/* Data + Horário */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1">
-          <label className="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">Data</label>
-          <div className="relative">
-            <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={16} />
-            <input
-              type="date"
-              value={form.date || ""}
-              onChange={e => {
-                const newDateStr = e.target.value;
-                set("date", newDateStr);
-                if (onDateChange && newDateStr) {
-                  // Ensure correctly parsed date object without time zone issues
-                  const [y, m, d] = newDateStr.split("-").map(Number);
-                  onDateChange(new Date(y, m - 1, d));
-                }
-              }}
-              className="w-full bg-surface-subtle border-none rounded-2xl pl-11 pr-4 py-3 text-sm text-text-primary outline-none focus:ring-1 focus:ring-brand-primary font-bold"
-              style={{ colorScheme: "dark" }}
-            />
-          </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="figma-form-group relative" ref={datePickerRef}>
+          <label className="figma-form-label">Data</label>
+          <button
+            type="button"
+            onClick={() => setShowDatePicker(p => !p)}
+            className="figma-form-input text-left font-bold flex items-center justify-between cursor-pointer"
+          >
+            <span>{form.date ? format(new Date(form.date + "T12:00:00"), "dd/MM/yyyy") : "Selecionar Data"}</span>
+            <Calendar size={14} className="text-text-secondary" />
+          </button>
+          {showDatePicker && (
+            <div className="absolute left-0 top-full mt-2 z-[2000] bg-[#121214] border border-white/[0.05] rounded-3xl shadow-2xl p-3 figma-datepicker-popover">
+              <DayPicker
+                mode="single"
+                selected={form.date ? new Date(form.date + "T12:00:00") : undefined}
+                onSelect={(d) => {
+                  if (d) {
+                    const formatted = format(d, "yyyy-MM-dd");
+                    set("date", formatted);
+                    if (onDateChange) onDateChange(d);
+                    setShowDatePicker(false);
+                  }
+                }}
+              />
+            </div>
+          )}
         </div>
-        <div className="space-y-1">
-          <label className="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">Horário</label>
-          <div className="relative">
-            <Clock className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={16} />
-            <input
-              type="time"
-              value={form.time || ""}
-              onChange={e => set("time", e.target.value)}
-              className="w-full bg-surface-subtle border-none rounded-2xl pl-11 pr-4 py-3 text-sm text-text-primary outline-none focus:ring-1 focus:ring-brand-primary font-bold"
-            />
-          </div>
+
+        <div className="figma-form-group relative" ref={timePickerRef}>
+          <label className="figma-form-label">Horário</label>
+          <button
+            type="button"
+            onClick={() => setShowTimePicker(p => !p)}
+            className="figma-form-input text-left font-bold flex items-center justify-between cursor-pointer"
+          >
+            <span>{form.time || "Selecionar Horário"}</span>
+            <Clock size={14} className="text-text-secondary" />
+          </button>
+          {showTimePicker && (
+            <div className="absolute right-0 top-full mt-2 z-[2000] bg-[#121214] border border-white/[0.05] rounded-3xl shadow-2xl p-3 w-[180px] flex gap-2 h-[180px]">
+              {/* Hour Wheel */}
+              <div className="flex-1 overflow-y-auto custom-scroll flex flex-col gap-1 text-center pr-1 snap-y snap-mandatory">
+                <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1 border-b border-white/5 pb-1">H</div>
+                {Array.from({ length: 16 }, (_, i) => String(i + 7).padStart(2, "0")).map(h => {
+                  const currentHour = form.time ? form.time.split(":")[0] : "08";
+                  const isSelected = currentHour === h;
+                  return (
+                    <button
+                      key={h}
+                      type="button"
+                      onClick={() => {
+                        const m = form.time ? form.time.split(":")[1] : "00";
+                        set("time", `${h}:${m}`);
+                      }}
+                      className={cn(
+                        "w-full py-1 rounded-xl text-[11px] font-bold border-none cursor-pointer transition-all snap-center",
+                        isSelected 
+                          ? "bg-brand-primary text-surface-page font-black" 
+                          : "text-text-secondary hover:bg-white/5"
+                      )}
+                    >
+                      {h}
+                    </button>
+                  );
+                })}
+              </div>
+              
+              {/* Minutes Wheel */}
+              <div className="flex-1 overflow-y-auto custom-scroll flex flex-col gap-1 text-center pr-1 snap-y snap-mandatory">
+                <div className="text-[9px] font-black text-text-muted uppercase tracking-widest mb-1 border-b border-white/5 pb-1">M</div>
+                {Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0")).map(m => {
+                  const currentMin = form.time ? form.time.split(":")[1] : "00";
+                  const isSelected = currentMin === m;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => {
+                        const h = form.time ? form.time.split(":")[0] : "08";
+                        set("time", `${h}:${m}`);
+                      }}
+                      className={cn(
+                        "w-full py-1 rounded-xl text-[11px] font-bold border-none cursor-pointer transition-all snap-center",
+                        isSelected 
+                          ? "bg-brand-primary text-surface-page font-black" 
+                          : "text-text-secondary hover:bg-white/5"
+                      )}
+                    >
+                      {m}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Horários livres */}
       {freeSlots.length > 0 && (
-        <div className="space-y-2">
-          {/* Label + Dropdown */}
-          <div className="flex justify-between items-center">
-            <label className="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">
+        <div className="figma-form-group">
+          <div className="figma-form-label-row">
+            <label className="figma-form-label">
               Sugestões de Horário Livre
             </label>
             <div className="relative" ref={dropdownRef}>
               <button
                 type="button"
                 onClick={() => setShowPeriodPicker(p => !p)}
-                className="text-[10px] font-black uppercase tracking-widest text-brand-primary hover:text-white transition-all flex items-center gap-1 border-none bg-transparent h-auto p-0"
+                className="text-[10px] font-bold uppercase tracking-wider text-brand-primary hover:text-white transition-all flex items-center gap-1 border-none bg-transparent h-auto p-0 cursor-pointer"
               >
                 <Copy size={12} /> Copiar Lista <ChevronDown size={10} className={`transition-transform ${showPeriodPicker ? "rotate-180" : ""}`} />
               </button>
@@ -284,7 +398,7 @@ export const AppointmentForm = memo(function AppointmentForm({
                     key={key}
                     type="button"
                     onClick={() => handleCopySlots(key)}
-                    className="w-full flex items-center gap-2.5 px-4 py-3 text-[11px] font-black text-text-secondary hover:bg-surface-subtle hover:text-white transition-all border-none text-left"
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-[11px] font-black text-text-secondary hover:bg-surface-subtle hover:text-white transition-all border-none text-left cursor-pointer"
                   >
                     {icon} {label}
                   </button>
@@ -294,62 +408,66 @@ export const AppointmentForm = memo(function AppointmentForm({
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            {freeSlots.map(s => (
-              <button
-                key={s.time}
-                type="button"
-                onClick={() => set("time", s.time)}
-                className="px-3 py-1.5 rounded-lg bg-white/5 text-[10px] font-black text-text-secondary hover:bg-brand-primary hover:text-surface-page transition-all border-none"
-              >
-                {s.time}
-              </button>
-            ))}
+            {freeSlots.map(s => {
+              const isSelected = form.time === s.time;
+              return (
+                <button
+                  key={s.time}
+                  type="button"
+                  onClick={() => set("time", s.time)}
+                  className={cn("figma-free-slot border-none", isSelected && "figma-free-slot-active")}
+                >
+                  {s.time}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
 
       {/* Serviço */}
-      <div className="space-y-1">
-        <label className="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">Serviço</label>
+      <div className="figma-form-group">
+        <label className="figma-form-label">Serviço</label>
         <AutocompleteInput
           value={form.service || ""}
           onChange={val => set("service", val)}
           onSelect={handleSelectService}
           suggestions={serviceSuggestions}
           placeholder="Digite o serviço..."
-          inputClassName="uppercase font-bold bg-surface-subtle"
+          inputClassName="uppercase font-bold figma-form-input"
         />
       </div>
 
-      {/* Valor */}
-      <div className="space-y-1">
-        <label className="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">Valor (R$)</label>
-        <input
-          type="number"
-          step="0.01"
-          value={form.value ?? 0}
-          onChange={e => set("value", parseFloat(e.target.value) || 0)}
-          className="w-full bg-surface-subtle border-none rounded-2xl px-4 py-3 text-sm text-text-primary outline-none focus:ring-1 focus:ring-brand-primary font-bold"
-          placeholder="0.00"
-        />
-      </div>
-      {/* Pagamento */}
-      <div className="space-y-1">
-        <label className="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">Pagamento</label>
-        <PaymentSelector
-          value={form.paymentMethod || ""}
-          onChange={val => set("paymentMethod", val)}
-        />
+      {/* Valor + Pagamento */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="figma-form-group">
+          <label className="figma-form-label">Valor (R$)</label>
+          <input
+            type="number"
+            step="0.01"
+            value={form.value ?? 0}
+            onChange={e => set("value", parseFloat(e.target.value) || 0)}
+            className="figma-form-input font-bold"
+            placeholder="0.00"
+          />
+        </div>
+        <div className="figma-form-group">
+          <label className="figma-form-label">Pagamento</label>
+          <PaymentSelector
+            value={form.paymentMethod || ""}
+            onChange={val => set("paymentMethod", val)}
+          />
+        </div>
       </div>
 
       {/* Observações */}
-      <div className="space-y-1">
-        <label className="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">Observações</label>
+      <div className="figma-form-group">
+        <label className="figma-form-label">Observações</label>
         <textarea
           placeholder="Informações adicionais..."
           value={form.observations || ""}
           onChange={e => set("observations", e.target.value)}
-          className="w-full bg-surface-subtle border-none rounded-2xl px-4 py-3 text-sm text-text-primary outline-none focus:ring-1 focus:ring-brand-primary min-h-[80px] resize-none font-medium"
+          className="figma-form-textarea font-medium"
         />
       </div>
 
@@ -357,9 +475,9 @@ export const AppointmentForm = memo(function AppointmentForm({
       <button
         type="button"
         onClick={() => onSave({ ...form, service: form.service?.trim() || "A DEFINIR" })}
-        className="w-full bg-brand-primary text-surface-page py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:scale-[1.01] active:scale-[0.98] transition-all shadow-xl shadow-brand-primary/10 border-none mt-4"
+        className="figma-form-button-save border-none"
       >
-        {form.id ? "Salvar Alterações" : "Salvar Agendamento"}
+        Salvar
       </button>
     </div>
   );

@@ -92,13 +92,13 @@ export function AutocompleteInput<T = unknown>({
         placeholder={placeholder}
         onFocus={() => setIsOpen(true)}
         className={cn(
-          "w-full bg-surface-subtle border-none rounded-2xl px-4 py-3 text-sm text-text-primary outline-none focus:ring-1 focus:ring-brand-primary placeholder:text-text-muted",
-          inputClassName
+          "w-full outline-none",
+          inputClassName || "bg-surface-subtle border-none rounded-2xl px-4 py-3 text-sm text-text-primary focus:ring-1 focus:ring-brand-primary placeholder:text-text-muted"
         )}
       />
 
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-[#1c1c1f] backdrop-blur-3xl rounded-2xl p-1.5 shadow-2xl z-[2000] border border-white/10 max-h-48 overflow-y-auto custom-scroll">
+        <div className="absolute top-full left-0 right-0 mt-2 bg-[#1c1c1f] backdrop-blur-3xl rounded-2xl p-1.5 shadow-2xl z-[2000] max-h-48 overflow-y-auto custom-scroll">
           {filteredSuggestions.map((suggestion) => (
             <button
               key={suggestion.id}

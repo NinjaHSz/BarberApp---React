@@ -56,8 +56,8 @@ export function PaymentSelector({ value, onChange, className, isCompact = false 
           "flex items-center justify-between gap-1.5 transition-all duration-300 outline-none border-none",
           isCompact 
             ? "px-2 py-0.5 rounded-md bg-surface-subtle/40 text-[9px] font-black uppercase tracking-tight text-text-secondary hover:bg-surface-subtle" 
-            : "w-full px-4 py-3 rounded-2xl bg-surface-subtle text-sm font-bold text-text-primary ring-brand-primary/20 hover:ring-1",
-          isOpen && !isCompact && "ring-1 ring-brand-primary"
+            : "w-full px-5 rounded-2xl bg-[#27272A] h-[45px] text-[12px] font-bold text-white hover:bg-[#2e2e32]",
+          isOpen && !isCompact && "bg-[#2e2e32]"
         )}
       >
         <div className="flex items-center gap-1.5 truncate">
@@ -75,7 +75,7 @@ export function PaymentSelector({ value, onChange, className, isCompact = false 
 
       {isOpen && (
         <div className={cn(
-          "absolute left-0 z-[500] mt-1 bg-[#121214] rounded-lg p-0.5 shadow-[0_20px_50px_rgba(0,0,0,1)] animate-in fade-in zoom-in-95 duration-200 border border-white/[0.05] top-full",
+          "absolute left-0 z-[500] mt-1 bg-[#121214] rounded-lg p-0.5 shadow-[0_20px_50px_rgba(0,0,0,1)] animate-in fade-in zoom-in-95 duration-200 top-full",
           isCompact ? "min-w-[110px]" : "w-full min-w-[160px]"
         )}>
           <div className="max-h-60 overflow-y-auto custom-scroll">

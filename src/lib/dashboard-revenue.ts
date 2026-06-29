@@ -63,8 +63,12 @@ export function computeStatsFromRows(
   let month = 0;
   let year = 0;
 
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+
   for (const row of rows) {
     if (!row.data) continue;
+    if (row.data > todayStr) continue; // Skip future appointments
+
     const d = parseISO(row.data);
     const v = row.valor || 0;
     if (isSameDay(d, referenceDate)) day += v;
@@ -80,11 +84,15 @@ export function computeChartValuesFromRows(
   referenceDate: Date,
   granularity: ChartGranularity
 ): number[] {
-  const appointments = rows.map((r) => ({
-    date: r.data,
-    time: r.horario || "",
-    value: r.valor || 0,
-  }));
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+
+  const appointments = rows
+    .filter((r) => r.data && r.data <= todayStr) // Skip future appointments
+    .map((r) => ({
+      date: r.data,
+      time: r.horario || "",
+      value: r.valor || 0,
+    }));
 
   if (granularity === "diario") {
     const hours = ["08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00"];
@@ -147,6 +155,7 @@ async function fetchAppointmentsInYear(year: number): Promise<AppointmentRow[]> 
       .gte("data", start)
       .lte("data", end)
       .order("data", { ascending: true })
+      .order("id", { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
 
     if (error) throw error;
@@ -230,15 +239,6 @@ export async function fetchDashboardRevenue(
   referenceDate: Date,
   granularity: ChartGranularity
 ): Promise<{ stats: RevenueStats; chartValues: number[]; source: "rpc" | "fallback" }> {
-  try {
-    const rpc = await fetchDashboardRevenueViaRpc(referenceDate, granularity);
-    if (rpc) {
-      return { ...rpc, source: "rpc" };
-    }
-  } catch (e) {
-    console.warn("[Dashboard] RPC indisponível, usando fallback paginado:", e);
-  }
-
   const fallback = await fetchDashboardRevenueFallback(referenceDate, granularity);
   return { ...fallback, source: "fallback" };
 }

@@ -4,8 +4,6 @@ import "./globals.css";
 import { Providers } from "@/lib/providers";
 import { Sidebar } from "@/components/layout/sidebar";
 import { MobileDock } from "@/components/layout/mobile-dock";
-import { JarvisAssistant } from "@/components/layout/jarvis-assistant";
-import { JarvisChat } from "@/components/layout/jarvis-chat";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -54,7 +52,7 @@ export default function RootLayout({
             {children}
           </main>
           <MobileDock />
-          <JarvisChat />
+
         </Providers>
       </body>
     </html>

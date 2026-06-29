@@ -2,14 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 import { 
   LayoutDashboard, 
   Calendar, 
   Users, 
   Crown, 
-  MinusCircle, 
-  CreditCard,
-  Settings
+  Scissors 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,16 +16,25 @@ const navItems = [
   { href: "/", icon: LayoutDashboard, label: "Home" },
   { href: "/agenda", icon: Calendar, label: "Agenda" },
   { href: "/clientes", icon: Users, label: "Clientes" },
+  { href: "/barbeiros", icon: Scissors, label: "Barbeiros" },
   { href: "/planos", icon: Crown, label: "Planos" },
-  { href: "/saidas", icon: MinusCircle, label: "Saídas" },
 ];
 
 export function MobileDock() {
   const pathname = usePathname();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return null;
+  }
 
   return (
     <div className="md:hidden fixed bottom-6 left-0 right-0 z-[100] px-4 flex justify-center">
-      <div className="bg-surface-section/80 backdrop-blur-3xl px-6 py-3 rounded-[2.5rem] flex items-center justify-between w-full max-w-md shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/5 relative overflow-hidden">
+      <div className="bg-surface-section/80 backdrop-blur-3xl px-6 py-3 rounded-[2.5rem] flex items-center justify-between w-full max-w-md shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative overflow-hidden">
         {/* Glow effect */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-px bg-gradient-to-r from-transparent via-brand-primary/20 to-transparent" />
         

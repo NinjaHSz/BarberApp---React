@@ -133,7 +133,7 @@ export function InlineAutocomplete({
         autoComplete="off"
       />
       {isOpen && filteredSuggestions.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-[#1a1a1d] border border-white/10 rounded-xl p-1 shadow-2xl z-[1000] max-h-48 overflow-y-auto">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-[#1a1a1d] rounded-xl p-1 shadow-2xl z-[1000] max-h-48 overflow-y-auto">
           {filteredSuggestions.map((s) => (
             <button
               key={s.id}

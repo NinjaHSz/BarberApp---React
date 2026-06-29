@@ -126,7 +126,7 @@ export default function DashboardPage() {
           color: 'rgba(255, 255, 255, 0.03)',
         },
         ticks: {
-          color: '#64748b',
+          color: '#52525B', // Conforme design-system.md (--text-muted)
           font: { size: 10 },
         },
       },
@@ -135,7 +135,7 @@ export default function DashboardPage() {
           display: false,
         },
         ticks: {
-          color: '#64748b',
+          color: '#52525B', // Conforme design-system.md (--text-muted)
           font: { size: 10 },
         },
       },
