@@ -125,7 +125,7 @@ export default function ClientProfilePage() {
   });
 
   const updateAppointmentMutation = useMutation({
-    mutationFn: async ({ id: apptId, updates }: { id: string, updates: any }) => {
+    mutationFn: async ({ id: apptId, updates, barberId }: { id: string, updates: any, barberId?: string | number | null }) => {
       const dbUpdates: any = {};
       if (updates.service !== undefined) dbUpdates.procedimento = updates.service;
       if (updates.value !== undefined) dbUpdates.valor = updates.value;
@@ -133,15 +133,17 @@ export default function ClientProfilePage() {
       if (updates.paymentMethod !== undefined) dbUpdates.forma_pagamento = updates.paymentMethod;
       if (updates.time !== undefined) dbUpdates.horario = updates.time;
 
-      const { error } = await supabase.from("agendamentos").update(dbUpdates).eq("id", apptId);
+      const tableName = Number(barberId) === 3 ? "agendamentos_joao_lucas" : "agendamentos_lucas";
+      const { error } = await supabase.from(tableName).update(dbUpdates).eq("id", apptId);
       if (error) throw error;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["appointments"] }),
   });
 
   const deleteAppointmentMutation = useMutation({
-    mutationFn: async (apptId: string) => {
-      const { error } = await supabase.from("agendamentos").delete().eq("id", apptId);
+    mutationFn: async ({ apptId, barberId }: { apptId: string, barberId?: string | number | null }) => {
+      const tableName = Number(barberId) === 3 ? "agendamentos_joao_lucas" : "agendamentos_lucas";
+      const { error } = await supabase.from(tableName).delete().eq("id", apptId);
       if (error) throw error;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["appointments"] }),
@@ -375,7 +377,7 @@ export default function ClientProfilePage() {
                         <InlineInput
                           type="text"
                           value={appt.time?.substring(0, 5)}
-                          onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { time: v } })}
+                          onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { time: v }, barberId: appt.barberId })}
                           className="text-[11px] font-bold p-0 bg-transparent hover:bg-transparent h-auto"
                         />
                     </div>
@@ -386,12 +388,12 @@ export default function ClientProfilePage() {
                       <InlineAutocomplete
                         value={appt.service}
                         suggestions={serviceSuggestions}
-                        onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { service: v } })}
+                        onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { service: v }, barberId: appt.barberId })}
                         className="text-[12px] font-black text-white uppercase tracking-wide group-hover:text-brand-primary transition-colors h-auto"
                       />
                       <PaymentSelector
                         value={appt.paymentMethod || "PIX"}
-                        onChange={(val) => updateAppointmentMutation.mutate({ id: appt.id, updates: { paymentMethod: val } })}
+                        onChange={(val) => updateAppointmentMutation.mutate({ id: appt.id, updates: { paymentMethod: val }, barberId: appt.barberId })}
                         isCompact
                         className="w-[120px]"
                       />
@@ -399,7 +401,7 @@ export default function ClientProfilePage() {
                     <InlineInput
                       value={appt.observations || ""}
                       placeholder="Adicionar observação..."
-                      onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { observations: v } })}
+                      onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { observations: v }, barberId: appt.barberId })}
                       className="text-[10px] text-text-muted italic truncate max-w-lg p-0 bg-transparent hover:bg-white/5 transition-all text-left block"
                     />
                   </div>
@@ -410,12 +412,12 @@ export default function ClientProfilePage() {
                       <InlineInput
                         type="number"
                         value={appt.value?.toString() || "0"}
-                        onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { value: parseFloat(v) || 0 } })}
+                        onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { value: parseFloat(v) || 0 }, barberId: appt.barberId })}
                         className="p-0 bg-transparent hover:bg-white/5 transition-all h-auto w-16"
                       />
                     </div>
                     <button 
-                      onClick={() => { if(confirm("Excluir este agendamento do histórico?")) deleteAppointmentMutation.mutate(appt.id) }}
+                      onClick={() => { if(confirm("Excluir este agendamento do histórico?")) deleteAppointmentMutation.mutate({ apptId: appt.id, barberId: appt.barberId }) }}
                       className="p-3 rounded-2xl bg-white/5 text-text-muted hover:text-rose-500 hover:bg-rose-500/10 transition-all border-none"
                     >
                       <Trash2 size={16} />

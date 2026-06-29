@@ -84,6 +84,7 @@ export interface DbAppointment {
   valor: number | null;
   forma_pagamento: string | null;
   barbeiro_id: string | null;
+  barbeiro: string | null;
 }
 
 export interface Appointment {
@@ -104,7 +105,10 @@ export function useAppointments() {
   useEffect(() => {
     const channel = supabase
       .channel("appointments_realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "agendamentos" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "agendamentos_lucas" }, () => {
+        queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "agendamentos_joao_lucas" }, () => {
         queryClient.invalidateQueries({ queryKey: ["appointments"] });
       })
       .subscribe();
@@ -137,17 +141,28 @@ export function useAppointments() {
         from += PAGE_SIZE;
       }
 
-      return all.map((r) => ({
-        id: r.id,
-        date: r.data,
-        time: r.horario,
-        client: r.cliente,
-        service: r.procedimento || "A DEFINIR",
-        observations: r.observacoes,
-        value: Number(r.valor) || 0,
-        paymentMethod: r.forma_pagamento || "PIX",
-        barberId: r.barbeiro_id,
-      }));
+      return all.map((r) => {
+        let barberId = r.barbeiro_id;
+        if (!barberId && r.barbeiro) {
+          const bName = r.barbeiro.toLowerCase();
+          if (bName === "joão lucas" || bName === "joao lucas") {
+            barberId = "3";
+          } else if (bName === "lucas") {
+            barberId = "1";
+          }
+        }
+        return {
+          id: r.id,
+          date: r.data,
+          time: r.horario,
+          client: r.cliente,
+          service: r.procedimento || "A DEFINIR",
+          observations: r.observacoes,
+          value: Number(r.valor) || 0,
+          paymentMethod: r.forma_pagamento || "PIX",
+          barberId: barberId,
+        };
+      });
     },
   });
 }

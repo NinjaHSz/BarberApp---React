@@ -20,7 +20,14 @@ export function useDashboardRevenue(
       .channel("dashboard_revenue_realtime")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "agendamentos" },
+        { event: "*", schema: "public", table: "agendamentos_lucas" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["dashboard-revenue"] });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "agendamentos_joao_lucas" },
         () => {
           queryClient.invalidateQueries({ queryKey: ["dashboard-revenue"] });
         }

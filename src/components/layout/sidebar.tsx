@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
 import { 
   LayoutDashboard, 
   Calendar, 
@@ -23,17 +22,6 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return (
-      <aside className="hidden md:flex flex-col h-full bg-surface-section w-16 border-none text-white shrink-0" />
-    );
-  }
 
   return (
     <aside className="hidden md:flex flex-col h-full bg-surface-section transition-all duration-300 w-16 hover:w-64 group/sidebar z-50 overflow-hidden border-none text-white">

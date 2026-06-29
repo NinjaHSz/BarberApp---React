@@ -410,7 +410,7 @@ export default function AgendaPage() {
   );
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id: rawId, updates, dateStr }: { id: string, updates: Partial<Appointment>, dateStr: string }) => {
+    mutationFn: async ({ id: rawId, updates, dateStr, barberId }: { id: string, updates: Partial<Appointment>, dateStr: string, barberId?: string | number | null }) => {
       const id = String(rawId);
       const dbUpdates: any = {};
       if (updates.client !== undefined) dbUpdates.cliente = updates.client;
@@ -421,7 +421,7 @@ export default function AgendaPage() {
       if (updates.time !== undefined) dbUpdates.horario = updates.time;
       if (updates.date !== undefined) dbUpdates.data = updates.date;
 
-      const activeBarberId = updates.barberId !== undefined ? updates.barberId : selectedBarberId;
+      const activeBarberId = updates.barberId !== undefined ? updates.barberId : (barberId || selectedBarberId);
       const matchedBarber = barbers.find((b: any) => String(b.id) === String(activeBarberId));
       const barberName = matchedBarber ? matchedBarber.nome : null;
       const barberIdNum = matchedBarber ? Number(matchedBarber.id) : (activeBarberId ? Number(activeBarberId) : null);
@@ -433,8 +433,10 @@ export default function AgendaPage() {
         }
       }
 
+      const tableName = barberIdNum === 3 ? "agendamentos_joao_lucas" : "agendamentos_lucas";
+
       if (id.startsWith('empty-')) {
-        const { data, error } = await supabase.from('agendamentos').insert({
+        const { data, error } = await supabase.from(tableName).insert({
           cliente: updates.client || "---",
           procedimento: updates.service || "A DEFINIR",
           valor: updates.value || 0,
@@ -449,7 +451,7 @@ export default function AgendaPage() {
         return data; // Retorna o registro criado com o ID real
       } else {
         const queryId = /^\d+$/.test(id) ? parseInt(id, 10) : id;
-        const { error } = await supabase.from('agendamentos').update(dbUpdates).eq('id', queryId);
+        const { error } = await supabase.from(tableName).update(dbUpdates).eq('id', queryId);
         if (error) throw error;
         return null;
       }
@@ -459,7 +461,8 @@ export default function AgendaPage() {
       
       // Se foi uma inserção (agendamento novo), salvamos o ID real para o Rebobinar
       if (variables.id.startsWith('empty-') && data?.id) {
-        setLastAction({ type: "agendar", data: { id: data.id, time: data.horario, client: data.cliente } });
+        const activeBarberId = variables.updates.barberId || variables.barberId || selectedBarberId;
+        setLastAction({ type: "agendar", data: { id: data.id, time: data.horario, client: data.cliente, barberId: activeBarberId } });
       }
       
       queryClient.refetchQueries({ queryKey: ["records", variables.dateStr] });
@@ -470,9 +473,10 @@ export default function AgendaPage() {
   });
 
   const cancelMutation = useMutation({
-    mutationFn: async ({ id: rawId }: { id: string }) => {
+    mutationFn: async ({ id: rawId, barberId }: { id: string, barberId?: string | number | null }) => {
       const id = String(rawId);
-      const { error } = await supabase.from('agendamentos').delete().eq('id', id);
+      const tableName = Number(barberId) === 3 ? "agendamentos_joao_lucas" : "agendamentos_lucas";
+      const { error } = await supabase.from(tableName).delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -492,9 +496,12 @@ export default function AgendaPage() {
   const handleUndo = async () => {
     if (!lastAction) return;
 
+    const barberId = lastAction.data.barberId;
+    const tableName = Number(barberId) === 3 ? "agendamentos_joao_lucas" : "agendamentos_lucas";
+
     if (lastAction.type === "agendar") {
        if (lastAction.data.id) {
-         await supabase.from('agendamentos').delete().eq('id', lastAction.data.id);
+         await supabase.from(tableName).delete().eq('id', lastAction.data.id);
        }
     } else if (lastAction.type === "cancelar" || lastAction.type === "editar") {
        const data = lastAction.data;
@@ -505,13 +512,15 @@ export default function AgendaPage() {
          forma_pagamento: data.paymentMethod,
          observacoes: data.observations,
          data: data.date,
-         horario: data.time
+         horario: data.time,
+         barbeiro: data.barbeiro,
+         barbeiro_id: data.barberId
        };
 
        if (lastAction.type === "cancelar") {
-         await supabase.from('agendamentos').insert([dbRecord]);
+         await supabase.from(tableName).insert([dbRecord]);
        } else {
-         await supabase.from('agendamentos').update(dbRecord).eq('id', data.id);
+         await supabase.from(tableName).update(dbRecord).eq('id', data.id);
        }
     }
 
@@ -525,7 +534,8 @@ export default function AgendaPage() {
     if (match) {
       setLastAction({ type: "editar", data: { ...match } });
     }
-    updateMutation.mutate({ id, updates, dateStr: selectedDateStr });
+    const barberId = match ? match.barberId : undefined;
+    updateMutation.mutate({ id, updates, dateStr: selectedDateStr, barberId });
   }, [updateMutation, selectedDateStr]);
 
   const handleCancel = useCallback((record: Appointment) => {
@@ -536,7 +546,7 @@ export default function AgendaPage() {
   const confirmCancel = () => {
     if (recordToCancel) {
       setLastAction({ type: "cancelar", data: { ...recordToCancel } });
-      cancelMutation.mutate({ id: recordToCancel.id });
+      cancelMutation.mutate({ id: recordToCancel.id, barberId: recordToCancel.barberId });
       setIsCancelModalOpen(false);
       
       // Notificação de Sucesso (Compacta)
@@ -685,7 +695,8 @@ export default function AgendaPage() {
     updateMutation.mutate({ 
       id: formData.id || `empty-${formData.time}`, 
       updates: formData, 
-      dateStr: selectedDateStr 
+      dateStr: selectedDateStr,
+      barberId: formData.barberId
     });
 
     // Notificação de Sucesso
