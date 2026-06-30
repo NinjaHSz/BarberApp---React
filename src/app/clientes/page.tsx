@@ -1,13 +1,76 @@
 "use client";
-
+ 
 import { useClients, useSupabase } from "@/hooks/use-data";
-import { Plus, Search, Filter, Trash2, Edit2, User, Phone, MapPin, Crown, ChevronRight, XCircle, LayoutGrid, List } from "lucide-react";
+import { Plus, Search, Filter, Trash2, Edit2, User, Phone, MapPin, Crown, ChevronRight, XCircle, LayoutGrid, List, Check, Loader2, Sparkles, Link2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useMemo } from "react";
 import { PremiumSelector } from "@/components/shared/premium-selector";
 import { Modal } from "@/components/shared/modal";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { InlineInput } from "@/components/shared/inline-input";
+
+function getJaroWinklerSimilarity(s1: string, s2: string): number {
+  let m = 0;
+  if (s1.length === 0 || s2.length === 0) return 0;
+  s1 = s1.toLowerCase().trim();
+  s2 = s2.toLowerCase().trim();
+  if (s1 === s2) return 1;
+
+  const range = Math.floor(Math.max(s1.length, s2.length) / 2) - 1;
+  const s1Matches = new Array(s1.length).fill(false);
+  const s2Matches = new Array(s2.length).fill(false);
+
+  for (let i = 0; i < s1.length; i++) {
+    const low = Math.max(0, i - range);
+    const high = Math.min(i + range + 1, s2.length);
+    for (let j = low; j < high; j++) {
+      if (!s2Matches[j] && s1[i] === s2[j]) {
+        s1Matches[i] = true;
+        s2Matches[j] = true;
+        m++;
+        break;
+      }
+    }
+  }
+
+  if (m === 0) return 0;
+
+  let t = 0;
+  let k = 0;
+  for (let i = 0; i < s1.length; i++) {
+    if (s1Matches[i]) {
+      while (!s2Matches[k]) k++;
+      if (s1[i] !== s2[k]) t++;
+      k++;
+    }
+  }
+
+  t = t / 2;
+  const jaro = (m / s1.length + m / s2.length + (m - t) / m) / 3;
+  
+  let p = 0.1;
+  let l = 0;
+  while (s1[l] === s2[l] && l < 4) l++;
+  
+  return jaro + l * p * (1 - jaro);
+}
+
+function getNameSimilarity(n1: string, n2: string): number {
+  if (!n1 || !n2) return 0;
+  const clean1 = n1.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const clean2 = n2.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  
+  if (clean1 === clean2) return 1;
+  
+  if (clean1.includes(clean2) || clean2.includes(clean1)) {
+    const minLen = Math.min(clean1.length, clean2.length);
+    const maxLen = Math.max(clean1.length, clean2.length);
+    return minLen / maxLen;
+  }
+  
+  return getJaroWinklerSimilarity(clean1, clean2);
+}
 
 export default function ClientsPage() {
   const queryClient = useQueryClient();
@@ -19,6 +82,12 @@ export default function ClientsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<any>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("list");
+
+  // State for Smart Sync
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncContacts, setSyncContacts] = useState<any[]>([]);
+
 
   const filteredClients = useMemo(() => {
     let result = [...clients];
@@ -87,6 +156,8 @@ export default function ClientsPage() {
     });
     setIsModalOpen(true);
   };
+
+  // (removed handleStartSync and syncMutation)
 
   if (loadingClients) {
     return (
@@ -161,6 +232,8 @@ export default function ClientsPage() {
               </button>
             )}
           </div>
+
+          {/* (removed Sync Button) */}
 
           {/* Cadastrar button as a small square next to search/filters */}
           <button
@@ -251,9 +324,10 @@ export default function ClientsPage() {
         </div>
       ) : (
         <div className="bg-surface-section/30 rounded-[1.5rem] lg:rounded-[2rem] overflow-hidden shadow-2xl">
-          <div className="hidden md:grid grid-cols-[60px_1fr_180px_150px_150px_120px] gap-4 px-8 py-5 text-[10px] font-black text-text-muted uppercase tracking-[0.2em] bg-white/[0.02]">
+          <div className="hidden md:grid grid-cols-[60px_1.5fr_1.2fr_1.5fr_1fr_1fr_120px] gap-4 px-8 py-5 text-[10px] font-black text-text-muted uppercase tracking-[0.2em] bg-white/[0.02]">
             <div>Avatar</div>
             <div>Nome</div>
+            <div>Telefone</div>
             <div>Observações</div>
             <div>Plano</div>
             <div>Desde</div>
@@ -264,7 +338,7 @@ export default function ClientsPage() {
               <Link 
                 key={client.id}
                 href={`/clientes/${client.id}`}
-                className="flex flex-col md:grid md:grid-cols-[60px_1fr_180px_150px_150px_120px] gap-3 md:gap-4 px-4 md:px-8 py-3 md:py-4 items-center hover:bg-white/[0.02] transition-colors group border-none"
+                className="flex flex-col md:grid md:grid-cols-[60px_1.5fr_1.2fr_1.5fr_1fr_1fr_120px] gap-3 md:gap-4 px-4 md:px-8 py-3 md:py-4 items-center hover:bg-white/[0.02] transition-colors group border-none"
               >
                 <div className="flex items-center gap-3 w-full md:w-auto">
                   <div className="w-10 h-10 rounded-xl bg-surface-page flex items-center justify-center text-brand-primary font-black text-sm shadow-lg group-hover:scale-110 transition-transform shrink-0">
@@ -275,13 +349,27 @@ export default function ClientsPage() {
                       {client.nome}
                     </h3>
                   </div>
-                   {/* Mobile Actions - Removed as requested */}
                 </div>
 
                 <div className="hidden md:block min-w-0">
                   <h3 className="text-white font-black text-[13px] uppercase tracking-tight group-hover:text-brand-primary transition-colors truncate">
                     {client.nome}
                   </h3>
+                </div>
+
+                <div 
+                  className="hidden md:block min-w-0"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                >
+                  <InlineInput 
+                    value={client.telefone || ""}
+                    placeholder="Adicionar..."
+                    onSave={(val) => saveMutation.mutate({ id: client.id, telefone: val })}
+                    className="text-white font-bold h-auto w-auto inline-block focus:bg-white/5"
+                  />
                 </div>
 
                 <div className="hidden md:block w-full md:w-auto text-[10px] md:text-[11px] font-medium text-text-muted truncate italic px-1 md:px-0">
@@ -386,6 +474,8 @@ export default function ClientsPage() {
           </button>
         </form>
       </Modal>
+
+      {/* (removed Sincronização Inteligente Modal) */}
     </div>
   );
 }

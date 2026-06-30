@@ -180,6 +180,14 @@ export default function ClientProfilePage() {
             onSave={(v) => updateMutation.mutate({ observacoes_cliente: v })}
             className="text-xs text-text-muted font-medium italic p-0 hover:text-white transition-all h-auto w-full md:w-max block"
           />
+          <div className="flex items-center gap-2 text-xs font-bold text-text-secondary justify-center sm:justify-start pt-1">
+            <span className="text-[9px] font-black text-text-muted uppercase tracking-wider">Telefone:</span>
+            <InlineInput
+              value={client.telefone || "Adicionar telefone..."}
+              onSave={(v) => updateMutation.mutate({ telefone: v })}
+              className="p-0 text-white font-bold h-auto w-auto inline-block focus:bg-white/5"
+            />
+          </div>
           <div className="flex items-center gap-4 pt-4 justify-center sm:justify-start">
             <Link href="/clientes" className="text-[9px] font-black text-text-muted hover:text-white uppercase tracking-widest flex items-center gap-2 group">
               <ChevronLeft size={12} className="transition-transform group-hover:-translate-x-1" /> Voltar
