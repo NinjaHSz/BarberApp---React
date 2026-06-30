@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "@/lib/providers";
 import { Sidebar } from "@/components/layout/sidebar";
 import { MobileDock } from "@/components/layout/mobile-dock";
+import ClickSpark from "@/components/ui/click-spark";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -47,12 +48,21 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-surface-page flex h-screen w-full overflow-hidden`}
       >
         <Providers>
-          <Sidebar />
-          <main className="flex-1 h-full overflow-auto custom-scroll relative">
-            {children}
-          </main>
-          <MobileDock />
-
+          <ClickSpark
+            sparkColor="#FAFAFA"
+            sparkSize={10}
+            sparkRadius={15}
+            sparkCount={8}
+            duration={400}
+          >
+            <div className="flex h-full w-full overflow-hidden">
+              <Sidebar />
+              <main className="flex-1 h-full overflow-auto custom-scroll relative">
+                {children}
+              </main>
+              <MobileDock />
+            </div>
+          </ClickSpark>
         </Providers>
       </body>
     </html>

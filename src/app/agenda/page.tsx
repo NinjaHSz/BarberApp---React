@@ -650,18 +650,15 @@ export default function AgendaPage() {
 
     const dateFormatted = format(currentDate, "dd/MM/yyyy", { locale: ptBR });
     const periodName = period === "manha" ? "Manhã" : period === "tarde" ? "Tarde" : "Todos";
-    let text = `📅 *AGENDA — ${dateFormatted} (${periodName.toUpperCase()})*\n\n`;
+    let text = `📅 *AGENDA — ${dateFormatted}*\n\n`;
     
     const times: string[] = [];
     filtered.forEach(s => {
       const timeStr = s.time.substring(0, 5);
-      const isVacant = s.isEmpty || s.client === "---";
-      const clientName = isVacant ? "DISPONÍVEL" : s.client.toUpperCase();
-      const serviceName = isVacant ? "" : ` (${s.service.toUpperCase()})`;
-      
-      text += `• ${timeStr} - ${clientName}${serviceName}\n`;
       times.push(timeStr);
     });
+
+    text += times.join(" ; ");
 
     navigator.clipboard.writeText(text);
     setPeriodFilterName(periodName);

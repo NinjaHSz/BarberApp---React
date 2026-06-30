@@ -236,14 +236,15 @@ export const AppointmentForm = memo(function AppointmentForm({
     const label = { manha: "Manhã", tarde: "Tarde", tudo: "Todos" }[period];
     const dateFormatted = format(currentDate, "dd/MM/yyyy");
     
-    let text = `📅 *AGENDA — ${dateFormatted} (${label.toUpperCase()})*\n\n`;
+    let text = `📅 *AGENDA — ${dateFormatted}*\n\n`;
     const times: string[] = [];
 
     filtered.forEach(s => {
       const timeStr = s.time.substring(0, 5);
-      text += `• ${timeStr} - DISPONÍVEL\n`;
       times.push(timeStr);
     });
+
+    text += times.join(" ; ");
     
     navigator.clipboard.writeText(text);
     
