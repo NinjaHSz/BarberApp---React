@@ -5,6 +5,7 @@ import { Providers } from "@/lib/providers";
 import { Sidebar } from "@/components/layout/sidebar";
 import { MobileDock } from "@/components/layout/mobile-dock";
 import ClickSpark from "@/components/ui/click-spark";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -64,6 +65,7 @@ export default function RootLayout({
             </div>
           </ClickSpark>
         </Providers>
+        <SpeedInsights />
       </body>
     </html>
   );
