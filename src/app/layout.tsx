@@ -5,6 +5,7 @@ import { Providers } from "@/lib/providers";
 import { Sidebar } from "@/components/layout/sidebar";
 import { MobileDock } from "@/components/layout/mobile-dock";
 import { MobileSyncButton } from "@/components/layout/mobile-sync-button";
+import { KeyboardNavigation } from "@/components/layout/keyboard-navigation";
 import ClickSpark from "@/components/ui/click-spark";
 
 const geistSans = Geist({
@@ -49,6 +50,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-surface-page flex h-screen w-full overflow-hidden`}
       >
         <Providers>
+          <KeyboardNavigation />
           <ClickSpark
             sparkColor="#FAFAFA"
             sparkSize={10}
