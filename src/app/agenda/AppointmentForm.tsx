@@ -498,7 +498,11 @@ export const AppointmentForm = memo(function AppointmentForm({
       {/* Salvar */}
       <button
         type="button"
-        onClick={() => onSave({ ...form, service: form.service?.trim() || "A DEFINIR" })}
+        onClick={() => onSave({ 
+          ...form, 
+          client: form.client?.trimEnd() || "---",
+          service: form.service?.trim() || "A DEFINIR" 
+        })}
         className="w-full py-3 mt-2 rounded-2xl bg-brand-primary text-surface-page text-[11px] font-black uppercase tracking-widest border-none hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer shadow-lg shadow-brand-primary/10"
       >
         Salvar Agendamento

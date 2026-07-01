@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "@/lib/providers";
 import { Sidebar } from "@/components/layout/sidebar";
 import { MobileDock } from "@/components/layout/mobile-dock";
+import { MobileSyncButton } from "@/components/layout/mobile-sync-button";
 import ClickSpark from "@/components/ui/click-spark";
 
 const geistSans = Geist({
@@ -61,6 +62,7 @@ export default function RootLayout({
                 {children}
               </main>
               <MobileDock />
+              <MobileSyncButton />
             </div>
           </ClickSpark>
         </Providers>

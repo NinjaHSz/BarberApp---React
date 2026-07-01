@@ -3,6 +3,32 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { AgendaProvider } from "./contexts/agenda-context";
+import { supabase } from "@/lib/supabase";
+import { useQueryClient } from "@tanstack/react-query";
+
+function RealtimeSubscriber({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("schema-db-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public" },
+        (payload) => {
+          console.log("[REALTIME] Alteração detectada no banco:", payload);
+          queryClient.invalidateQueries();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
+  return <>{children}</>;
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -30,9 +56,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AgendaProvider>
-        {children}
-      </AgendaProvider>
+      <RealtimeSubscriber>
+        <AgendaProvider>
+          {children}
+        </AgendaProvider>
+      </RealtimeSubscriber>
     </QueryClientProvider>
   );
 }

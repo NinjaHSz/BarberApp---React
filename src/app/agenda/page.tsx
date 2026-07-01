@@ -88,10 +88,17 @@ const RecordRow = memo(function RecordRowComponent({
   const isEmpty = record.isEmpty;
   const isBreak = record.client === "PAUSA";
 
+  const clientObj = useMemo(() => {
+    if (isEmpty || isBreak) return null;
+    return (clients || []).find((c) => c.nome?.toLowerCase() === record.client?.toLowerCase());
+  }, [clients, record.client, isEmpty, isBreak]);
+  const hasPhone = !!clientObj?.telefone;
+
   const handleClientSave = async (clientName: string) => {
-    const updates: Partial<Appointment> = { client: clientName || "---" };
+    const cleanName = (clientName || "").trimEnd();
+    const updates: Partial<Appointment> = { client: cleanName || "---" };
     const match = clients.find(
-      (c) => c.nome?.toLowerCase() === clientName?.toLowerCase()
+      (c) => c.nome?.toLowerCase() === cleanName?.toLowerCase()
     );
     if (match?.plano && match.plano !== "Nenhum" && match.plano !== "Pausado") {
       const today = record.date || format(new Date(), "yyyy-MM-dd");
@@ -148,11 +155,12 @@ const RecordRow = memo(function RecordRowComponent({
 
   return (
     <>
-      <div className={cn(
-        "hidden md:grid md:grid-cols-[80px_1.5fr_1.2fr_1fr_100px_130px_100px] md:gap-4 items-center px-6 py-3 transition-colors group relative border-none focus-within:z-[500] z-[1]",
+        <div className={cn(
+        "hidden md:grid md:grid-cols-[85px_1.5fr_1.2fr_1fr_100px_140px_110px] md:gap-0 items-stretch px-6 h-12 transition-colors group relative border-none focus-within:z-[500] z-[1]",
         isBreak ? "bg-surface-subtle" : "hover:bg-white/[0.02]"
       )}>
-        <div className="text-xs font-bold text-text-primary/80">
+        {/* Horário */}
+        <div className="h-full flex items-center px-4 transition-all focus-within:ring-2 focus-within:ring-inset focus-within:ring-brand-primary relative">
           <input 
             type="time" 
             defaultValue={record.time.substring(0, 5)}
@@ -161,51 +169,80 @@ const RecordRow = memo(function RecordRowComponent({
                 onUpdate(record.id, { time: e.target.value });
               }
             }}
-            className="bg-surface-section border-none outline-none focus:ring-1 focus:ring-brand-primary rounded px-1.5 py-0.5 w-auto text-xs font-bold text-text-primary/80 transition-all"
+            className="bg-transparent border-none outline-none focus:ring-0 rounded w-full text-xs font-bold text-text-primary/80 transition-all cursor-pointer"
           />
         </div>
 
-        <div className="relative min-w-0">
-          <InlineAutocomplete
-            value={isEmpty ? "" : (isBreak ? "PAUSA" : record.client)}
-            placeholder={isEmpty ? "---" : "Cliente..."}
-            suggestions={isBreak ? [] : clientSuggestions}
-            onSave={handleClientSave}
-            className={cn(
-              "text-sm font-bold uppercase",
-              isBreak ? "text-text-muted" : isEmpty ? "text-text-muted/40 italic font-medium" : "text-text-primary"
-            )}
-          />
-          {!isEmpty && !isBreak && (() => {
-            const clientObj = clients.find(
-              (c) => c.nome?.toLowerCase() === record.client?.toLowerCase()
-            );
-            if (!clientObj) return null;
-            return (
-              <Link
-                href={`/clientes/${clientObj.id}`}
-                className="absolute -right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1 text-brand-primary/50 hover:text-brand-primary transition-all"
-                title={`Ver perfil de ${record.client}`}
-              >
-                <ExternalLink size={10} />
-              </Link>
-            );
-          })()}
+        {/* Cliente */}
+        <div className="h-full flex items-center px-4 transition-all focus-within:ring-2 focus-within:ring-inset focus-within:ring-brand-primary relative min-w-0">
+          <div className="flex items-center gap-[3px] w-full min-w-0 h-full">
+            {(() => {
+              const clientObj = !isEmpty && !isBreak ? clients.find(
+                (c) => c.nome?.toLowerCase() === record.client?.toLowerCase()
+              ) : null;
+              
+              const isUnregistered = !isEmpty && !isBreak && !clientObj;
+
+              return (
+                <>
+                  <InlineAutocomplete
+                    value={isEmpty ? "" : (isBreak ? "PAUSA" : record.client)}
+                    placeholder={isEmpty ? "---" : "Cliente..."}
+                    suggestions={isBreak ? [] : clientSuggestions}
+                    onSave={handleClientSave}
+                    className={cn(
+                      "text-sm font-bold uppercase w-full inline-block truncate h-full flex items-center",
+                      isBreak 
+                        ? "text-text-muted" 
+                        : isEmpty 
+                        ? "text-text-muted/40 italic font-medium" 
+                        : isUnregistered
+                        ? "text-yellow-500/70"
+                        : "text-text-primary"
+                    )}
+                  />
+                  {!isEmpty && !isBreak && (
+                    isUnregistered ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onUpdate(record.id, { client: record.client });
+                        }}
+                        className="p-0.5 text-yellow-500/70 hover:text-yellow-400 transition-all shrink-0 border-none bg-transparent cursor-pointer"
+                        title={`Cadastrar ${record.client}`}
+                      >
+                        <Plus size={13} strokeWidth={2.5} />
+                      </button>
+                    ) : (
+                      <Link
+                        href={`/clientes/${clientObj.id}`}
+                        className="opacity-0 group-hover:opacity-100 p-0.5 text-brand-primary/50 hover:text-brand-primary transition-all shrink-0"
+                        title={`Ver perfil de ${record.client}`}
+                      >
+                        <ExternalLink size={13} strokeWidth={2.5} />
+                      </Link>
+                    )
+                  )}
+                </>
+              );
+            })()}
+          </div>
         </div>
 
-        <div className="relative min-w-0">
+        {/* Serviço */}
+        <div className="h-full flex items-center px-4 transition-all focus-within:ring-2 focus-within:ring-inset focus-within:ring-brand-primary relative min-w-0">
           <InlineAutocomplete
             value={isEmpty ? "" : (isBreak ? "RESERVADO" : record.service)}
             placeholder={isEmpty ? "A DEFINIR" : "Serviço..."}
             suggestions={isBreak ? [] : serviceSuggestions}
             onSave={(val, item) => {
               const updates: Partial<Appointment> = { service: val || "A DEFINIR" };
-              // 1. Try finding by name in procedures list
               const match = procedures.find(p => p.nome?.toLowerCase().trim() === val?.toLowerCase().trim());
               if (match) {
                 updates.value = match.preco ?? match.valor ?? 0;
               } 
-              // 2. Fallback: Parse from subLabel if item is available
               else if (item?.subLabel) {
                  const raw = item.subLabel.replace("R$ ", "").replace(/\./g, "").replace(",", ".");
                  const price = parseFloat(raw);
@@ -214,36 +251,40 @@ const RecordRow = memo(function RecordRowComponent({
               onUpdate(record.id, updates);
             }}
             className={cn(
-              "text-sm uppercase font-medium",
+              "text-sm uppercase font-medium w-full h-full flex items-center",
               isBreak ? "text-text-muted italic" : isEmpty ? "text-text-muted/40" : record.service === "A DEFINIR" ? "text-rose-500 font-black animate-pulse" : "text-text-primary"
             )}
           />
         </div>
 
-        <div className="text-xs text-text-secondary italic min-w-0">
+        {/* Observações */}
+        <div className="h-full flex items-center px-4 transition-all focus-within:ring-2 focus-within:ring-inset focus-within:ring-brand-primary relative min-w-0">
            <InlineInput 
             value={isEmpty || isBreak ? "" : (record.observations || "")} 
             placeholder={isEmpty || isBreak ? "---" : "Nenhuma obs..."}
             onSave={(val) => onUpdate(record.id, { observations: val })}
-            className="truncate"
+            className="truncate w-full h-full flex items-center text-xs text-text-secondary italic"
           />
         </div>
 
-        <div className={cn("text-sm font-bold", isBreak ? "text-text-muted/50" : "text-brand-primary/90")}>
+        {/* Valor */}
+        <div className="h-full flex items-center px-4 transition-all focus-within:ring-2 focus-within:ring-inset focus-within:ring-brand-primary relative">
           <InlineInput 
             type="number"
             prefix={isEmpty || isBreak ? undefined : "R$"}
             value={isEmpty || isBreak ? "" : record.value} 
             placeholder={isEmpty || isBreak ? "---" : "0.00"}
             onSave={(val) => onUpdate(record.id, { value: parseFloat(val) || 0 })}
+            className="w-full h-full flex items-center text-sm font-bold text-brand-primary/90"
           />
         </div>
 
-        <div className="relative">
+        {/* Pagamento */}
+        <div className="h-full flex items-center px-4 transition-all focus-within:ring-2 focus-within:ring-inset focus-within:ring-brand-primary relative">
           {isBreak ? (
             <span className="text-[10px] font-black text-text-muted uppercase">N/A</span>
           ) : (
-            <div className={cn("relative", isEmpty && "opacity-0 group-hover:opacity-100")}>
+            <div className={cn("relative w-full", isEmpty && "opacity-0 group-hover:opacity-100")}>
               <PaymentSelector
                 value={record.paymentMethod || ""}
                 onChange={(val) => onUpdate(record.id, { paymentMethod: val })}
@@ -253,27 +294,30 @@ const RecordRow = memo(function RecordRowComponent({
           )}
         </div>
 
-        <div className="flex justify-end gap-2">
+        {/* Ações */}
+        <div className="h-full flex items-center justify-end px-4 gap-1.5 transition-all relative">
           {!isEmpty ? (
             <>
-              <button 
-                onClick={() => onSendWhatsApp(record)}
-                className="w-8 h-8 rounded-xl bg-white/5 text-[#25D366]/70 hover:bg-[#25D366] hover:text-surface-page transition-all flex items-center justify-center border-none"
-                title="Enviar Lembrete WhatsApp"
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="fill-current">
-                  <path d="M17.472 14.382C17.175 14.233 15.714 13.515 15.442 13.415C15.169 13.316 14.971 13.267 14.772 13.565C14.575 13.862 14.005 14.531 13.832 14.729C13.659 14.928 13.485 14.952 13.188 14.804C12.891 14.654 11.933 14.341 10.798 13.329C9.91501 12.541 9.31801 11.568 9.14501 11.27C8.97201 10.973 9.12701 10.812 9.27501 10.664C9.40901 10.531 9.57301 10.317 9.72101 10.144C9.87001 9.97004 9.91901 9.84604 10.019 9.64704C10.118 9.44904 10.069 9.27604 9.99401 9.12704C9.91901 8.97804 9.32501 7.51504 9.07801 6.92004C8.83601 6.34104 8.59101 6.42004 8.40901 6.41004C8.23601 6.40204 8.03801 6.40004 7.83901 6.40004C7.64101 6.40004 7.31901 6.47404 7.04701 6.77204C6.77501 7.06904 6.00701 7.78804 6.00701 9.25104C6.00701 10.713 7.07201 12.126 7.22001 12.325C7.36901 12.523 9.31601 15.525 12.297 16.812C13.006 17.118 13.559 17.301 13.991 17.437C14.703 17.664 15.351 17.632 15.862 17.555C16.433 17.47 17.62 16.836 17.868 16.142C18.116 15.448 18.116 14.853 18.041 14.729C17.967 14.605 17.77 14.531 17.472 14.382ZM12.05 21.785H12.046C10.2758 21.7852 8.53809 21.3092 7.01501 20.407L6.65401 20.193L2.91301 21.175L3.91101 17.527L3.67601 17.153C2.68645 15.5773 2.16295 13.7537 2.16601 11.893C2.16701 6.44304 6.60201 2.00904 12.054 2.00904C14.694 2.00904 17.176 3.03904 19.042 4.90704C19.9627 5.82366 20.6924 6.91377 21.189 8.11428C21.6856 9.3148 21.9392 10.6019 21.935 11.901C21.932 17.351 17.498 21.785 12.05 21.785ZM20.463 3.48804C19.3612 2.37896 18.0502 1.49958 16.6061 0.900841C15.162 0.302105 13.6133 -0.00407625 12.05 4.09775e-05C5.49501 4.09775e-05 0.160007 5.33504 0.157007 11.892C0.157007 13.988 0.704007 16.034 1.74501 17.837L0.0570068 24L6.36201 22.346C8.1056 23.296 10.0594 23.7938 12.045 23.794H12.05C18.604 23.794 23.94 18.459 23.943 11.901C23.9478 10.3383 23.6428 8.79014 23.0454 7.34607C22.4481 5.90201 21.5704 4.59071 20.463 3.48804Z" fill="currentColor"/>
-                </svg>
-              </button>
+              {hasPhone && (
+                <button 
+                  onClick={() => onSendWhatsApp(record)}
+                  className="w-8 h-8 rounded-xl bg-white/5 text-[#25D366]/70 hover:bg-[#25D366] hover:text-surface-page transition-all flex items-center justify-center border-none shrink-0"
+                  title="Enviar Lembrete WhatsApp"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="fill-current">
+                    <path d="M17.472 14.382C17.175 14.233 15.714 13.515 15.442 13.415C15.169 13.316 14.971 13.267 14.772 13.565C14.575 13.862 14.005 14.531 13.832 14.729C13.659 14.928 13.485 14.952 13.188 14.804C12.891 14.654 11.933 14.341 10.798 13.329C9.91501 12.541 9.31801 11.568 9.14501 11.27C8.97201 10.973 9.12701 10.812 9.27501 10.664C9.40901 10.531 9.57301 10.317 9.72101 10.144C9.87001 9.97004 9.91901 9.84604 10.019 9.64704C10.118 9.44904 10.069 9.27604 9.99401 9.12704C9.91901 8.97804 9.32501 7.51504 9.07801 6.92004C8.83601 6.34104 8.59101 6.42004 8.40901 6.41004C8.23601 6.40204 8.03801 6.40004 7.83901 6.40004C7.64101 6.40004 7.31901 6.47404 7.04701 6.77204C6.77501 7.06904 6.00701 7.78804 6.00701 9.25104C6.00701 10.713 7.07201 12.126 7.22001 12.325C7.36901 12.523 9.31601 15.525 12.297 16.812C13.006 17.118 13.559 17.301 13.991 17.437C14.703 17.664 15.351 17.632 15.862 17.555C16.433 17.47 17.62 16.836 17.868 16.142C18.116 15.448 18.116 14.853 18.041 14.729C17.967 14.605 17.77 14.531 17.472 14.382ZM12.05 21.785H12.046C10.2758 21.7852 8.53809 21.3092 7.01501 20.407L6.65401 20.193L2.91301 21.175L3.91101 17.527L3.67601 17.153C2.68645 15.5773 2.16295 13.7537 2.16601 11.893C2.16701 6.44304 6.60201 2.00904 12.054 2.00904C14.694 2.00904 17.176 3.03904 19.042 4.90704C19.9627 5.82366 20.6924 6.91377 21.189 8.11428C21.6856 9.3148 21.9392 10.6019 21.935 11.901C21.932 17.351 17.498 21.785 12.05 21.785ZM20.463 3.48804C19.3612 2.37896 18.0502 1.49958 16.6061 0.900841C15.162 0.302105 13.6133 -0.00407625 12.05 4.09775e-05C5.49501 4.09775e-05 0.160007 5.33504 0.157007 11.892C0.157007 13.988 0.704007 16.034 1.74501 17.837L0.0570068 24L6.36201 22.346C8.1056 23.296 10.0594 23.7938 12.045 23.794H12.05C18.604 23.794 23.94 18.459 23.943 11.901C23.9478 10.3383 23.6428 8.79014 23.0454 7.34607C22.4481 5.90201 21.5704 4.59071 20.463 3.48804Z" fill="currentColor"/>
+                  </svg>
+                </button>
+              )}
               <button 
                 onClick={() => onEdit(record)}
-                className="w-8 h-8 rounded-xl bg-white/5 text-text-secondary hover:bg-brand-primary hover:text-surface-page transition-all flex items-center justify-center border-none"
+                className="w-8 h-8 rounded-xl bg-white/5 text-text-secondary hover:bg-brand-primary hover:text-surface-page transition-all flex items-center justify-center border-none shrink-0"
               >
                 <Edit size={14} />
               </button>
               <button 
                 onClick={() => onCancel(record)}
-                className="w-8 h-8 rounded-xl bg-white/5 text-rose-500/50 hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center border-none"
+                className="w-8 h-8 rounded-xl bg-white/5 text-rose-500/50 hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center border-none shrink-0"
               >
                 <Trash2 size={14} />
               </button>
@@ -281,12 +325,12 @@ const RecordRow = memo(function RecordRowComponent({
           ) : (
             <button 
               onClick={() => onAdd(record.time, record.date, record.barberId ? Number(record.barberId) : undefined)}
-              className="w-full py-1.5 rounded-lg bg-brand-primary text-surface-page text-[10px] font-black uppercase transition-all border-none"
+              className="px-3 h-8 rounded-xl bg-white/5 text-[10px] font-black uppercase text-brand-primary hover:bg-brand-primary hover:text-surface-page transition-all border-none shrink-0"
             >
               Agendar
             </button>
           )}
-        </div>
+        </div> 
       </div>
 
       <div className="md:hidden grid grid-cols-[70px_1fr_auto] gap-4 items-center px-6 py-4 bg-surface-section/40 rounded-2xl mx-1 my-1 border-none focus-within:z-[100] z-[1]">
@@ -299,11 +343,13 @@ const RecordRow = memo(function RecordRowComponent({
         <div className="flex justify-end items-center gap-2">
           {!isEmpty ? (
             <div className="flex gap-2">
-               <button onClick={() => onSendWhatsApp(record)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-subtle text-[#25D366]/70 active:scale-90 border-none">
-                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="fill-current">
-                   <path d="M17.472 14.382C17.175 14.233 15.714 13.515 15.442 13.415C15.169 13.316 14.971 13.267 14.772 13.565C14.575 13.862 14.005 14.531 13.832 14.729C13.659 14.928 13.485 14.952 13.188 14.804C12.891 14.654 11.933 14.341 10.798 13.329C9.91501 12.541 9.31801 11.568 9.14501 11.27C8.97201 10.973 9.12701 10.812 9.27501 10.664C9.40901 10.531 9.57301 10.317 9.72101 10.144C9.87001 9.97004 9.91901 9.84604 10.019 9.64704C10.118 9.44904 10.069 9.27604 9.99401 9.12704C9.91901 8.97804 9.32501 7.51504 9.07801 6.92004C8.83601 6.34104 8.59101 6.42004 8.40901 6.41004C8.23601 6.40204 8.03801 6.40004 7.83901 6.40004C7.64101 6.40004 7.31901 6.47404 7.04701 6.77204C6.77501 7.06904 6.00701 7.78804 6.00701 9.25104C6.00701 10.713 7.07201 12.126 7.22001 12.325C7.36901 12.523 9.31601 15.525 12.297 16.812C13.006 17.118 13.559 17.301 13.991 17.437C14.703 17.664 15.351 17.632 15.862 17.555C16.433 17.47 17.62 16.836 17.868 16.142C18.116 15.448 18.116 14.853 18.041 14.729C17.967 14.605 17.77 14.531 17.472 14.382ZM12.05 21.785H12.046C10.2758 21.7852 8.53809 21.3092 7.01501 20.407L6.65401 20.193L2.91301 21.175L3.91101 17.527L3.67601 17.153C2.68645 15.5773 2.16295 13.7537 2.16601 11.893C2.16701 6.44304 6.60201 2.00904 12.054 2.00904C14.694 2.00904 17.176 3.03904 19.042 4.90704C19.9627 5.82366 20.6924 6.91377 21.189 8.11428C21.6856 9.3148 21.9392 10.6019 21.935 11.901C21.932 17.351 17.498 21.785 12.05 21.785ZM20.463 3.48804C19.3612 2.37896 18.0502 1.49958 16.6061 0.900841C15.162 0.302105 13.6133 -0.00407625 12.05 4.09775e-05C5.49501 4.09775e-05 0.160007 5.33504 0.157007 11.892C0.157007 13.988 0.704007 16.034 1.74501 17.837L0.0570068 24L6.36201 22.346C8.1056 23.296 10.0594 23.7938 12.045 23.794H12.05C18.604 23.794 23.94 18.459 23.943 11.901C23.9478 10.3383 23.6428 8.79014 23.0454 7.34607C22.4481 5.90201 21.5704 4.59071 20.463 3.48804Z" fill="currentColor"/>
-                 </svg>
-               </button>
+               {hasPhone && (
+                 <button onClick={() => onSendWhatsApp(record)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-subtle text-[#25D366]/70 active:scale-90 border-none">
+                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="fill-current">
+                     <path d="M17.472 14.382C17.175 14.233 15.714 13.515 15.442 13.415C15.169 13.316 14.971 13.267 14.772 13.565C14.575 13.862 14.005 14.531 13.832 14.729C13.659 14.928 13.485 14.952 13.188 14.804C12.891 14.654 11.933 14.341 10.798 13.329C9.91501 12.541 9.31801 11.568 9.14501 11.27C8.97201 10.973 9.12701 10.812 9.27501 10.664C9.40901 10.531 9.57301 10.317 9.72101 10.144C9.87001 9.97004 9.91901 9.84604 10.019 9.64704C10.118 9.44904 10.069 9.27604 9.99401 9.12704C9.91901 8.97804 9.32501 7.51504 9.07801 6.92004C8.83601 6.34104 8.59101 6.42004 8.40901 6.41004C8.23601 6.40204 8.03801 6.40004 7.83901 6.40004C7.64101 6.40004 7.31901 6.47404 7.04701 6.77204C6.77501 7.06904 6.00701 7.78804 6.00701 9.25104C6.00701 10.713 7.07201 12.126 7.22001 12.325C7.36901 12.523 9.31601 15.525 12.297 16.812C13.006 17.118 13.559 17.301 13.991 17.437C14.703 17.664 15.351 17.632 15.862 17.555C16.433 17.47 17.62 16.836 17.868 16.142C18.116 15.448 18.116 14.853 18.041 14.729C17.967 14.605 17.77 14.531 17.472 14.382ZM12.05 21.785H12.046C10.2758 21.7852 8.53809 21.3092 7.01501 20.407L6.65401 20.193L2.91301 21.175L3.91101 17.527L3.67601 17.153C2.68645 15.5773 2.16295 13.7537 2.16601 11.893C2.16701 6.44304 6.60201 2.00904 12.054 2.00904C14.694 2.00904 17.176 3.03904 19.042 4.90704C19.9627 5.82366 20.6924 6.91377 21.189 8.11428C21.6856 9.3148 21.9392 10.6019 21.935 11.901C21.932 17.351 17.498 21.785 12.05 21.785ZM20.463 3.48804C19.3612 2.37896 18.0502 1.49958 16.6061 0.900841C15.162 0.302105 13.6133 -0.00407625 12.05 4.09775e-05C5.49501 4.09775e-05 0.160007 5.33504 0.157007 11.892C0.157007 13.988 0.704007 16.034 1.74501 17.837L0.0570068 24L6.36201 22.346C8.1056 23.296 10.0594 23.7938 12.045 23.794H12.05C18.604 23.794 23.94 18.459 23.943 11.901C23.9478 10.3383 23.6428 8.79014 23.0454 7.34607C22.4481 5.90201 21.5704 4.59071 20.463 3.48804Z" fill="currentColor"/>
+                   </svg>
+                 </button>
+               )}
                <button onClick={() => onEdit(record)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-subtle text-text-secondary active:scale-90 border-none">
                  <Edit size={18} />
                </button>
@@ -368,6 +414,30 @@ export default function AgendaPage() {
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [recordToCancel, setRecordToCancel] = useState<Appointment | null>(null);
 
+  // State for automatic client registration confirmation popup
+  const [pendingRegistration, setPendingRegistration] = useState<{
+    clientName: string;
+    onConfirm: () => void;
+    onCancelAction: () => void;
+  } | null>(null);
+
+  const registerClientMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const { error } = await supabase.from("clientes").insert([{ 
+        nome: name.trimEnd(),
+        telefone: "",
+        plano: "Nenhum",
+        valor_plano: 0,
+        limite_cortes: 0,
+        observacoes_cliente: ""
+      }]);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+    }
+  });
+
   const queryClient = useQueryClient();
   const selectedDateStr = format(currentDate, "yyyy-MM-dd");
 
@@ -430,31 +500,34 @@ export default function AgendaPage() {
     mutationFn: async ({ id: rawId, updates, dateStr, barberId }: { id: string, updates: Partial<Appointment>, dateStr: string, barberId?: string | number | null }) => {
       const id = String(rawId);
       const dbUpdates: any = {};
-      if (updates.client !== undefined) dbUpdates.cliente = updates.client;
+      if (updates.client !== undefined) {
+        dbUpdates.cliente = typeof updates.client === "string" ? updates.client.trimEnd() : updates.client;
+      }
       if (updates.service !== undefined) dbUpdates.procedimento = updates.service;
       if (updates.value !== undefined) dbUpdates.valor = updates.value;
       if (updates.observations !== undefined) dbUpdates.observacoes = updates.observations;
       if (updates.paymentMethod !== undefined) dbUpdates.forma_pagamento = updates.paymentMethod;
       if (updates.time !== undefined) dbUpdates.horario = updates.time;
       if (updates.date !== undefined) dbUpdates.data = updates.date;
-
+ 
       const activeBarberId = updates.barberId !== undefined ? updates.barberId : (barberId || selectedBarberId);
       const matchedBarber = barbers.find((b: any) => String(b.id) === String(activeBarberId));
       const barberName = matchedBarber ? matchedBarber.nome : null;
       const barberIdNum = matchedBarber ? Number(matchedBarber.id) : (activeBarberId ? Number(activeBarberId) : null);
-
+ 
       if (updates.barberId !== undefined) {
         dbUpdates.barbeiro_id = updates.barberId;
         if (matchedBarber) {
           dbUpdates.barbeiro = matchedBarber.nome;
         }
       }
-
+ 
       const tableName = barberIdNum === 3 ? "agendamentos_joao_lucas" : "agendamentos_lucas";
-
+ 
       if (id.startsWith('empty-')) {
+        const cleanInsertName = typeof updates.client === "string" ? updates.client.trimEnd() : (updates.client || "---");
         const { data, error } = await supabase.from(tableName).insert({
-          cliente: updates.client || "---",
+          cliente: cleanInsertName,
           procedimento: updates.service || "A DEFINIR",
           valor: updates.value || 0,
           forma_pagamento: updates.paymentMethod || "PIX",
@@ -552,8 +625,41 @@ export default function AgendaPage() {
       setLastAction({ type: "editar", data: { ...match } });
     }
     const barberId = match ? match.barberId : undefined;
-    updateMutation.mutate({ id, updates, dateStr: selectedDateStr, barberId });
-  }, [updateMutation, selectedDateStr]);
+
+    const proceedUpdate = (shouldRegister: boolean) => {
+      const finalUpdates = { ...updates };
+      
+      const runMutate = () => {
+        updateMutation.mutate({ id, updates: finalUpdates, dateStr: selectedDateStr, barberId });
+        setPendingRegistration(null);
+      };
+
+      if (shouldRegister && updates.client) {
+        registerClientMutation.mutate(updates.client, {
+          onSuccess: () => {
+            runMutate();
+          }
+        });
+      } else {
+        runMutate();
+      }
+    };
+
+    const cleanClientName = updates.client?.trimEnd();
+    if (cleanClientName && cleanClientName !== "---" && cleanClientName.toUpperCase() !== "PAUSA") {
+      const exists = clients?.some((c: any) => c.nome?.toLowerCase() === cleanClientName.toLowerCase());
+      if (!exists) {
+        setPendingRegistration({
+          clientName: cleanClientName,
+          onConfirm: () => proceedUpdate(true),
+          onCancelAction: () => proceedUpdate(false)
+        });
+        return;
+      }
+    }
+
+    proceedUpdate(false);
+  }, [updateMutation, selectedDateStr, clients]);
 
   const handleCancel = useCallback((record: Appointment) => {
     setRecordToCancel(record);
@@ -803,27 +909,60 @@ export default function AgendaPage() {
   const openEditModal = useCallback((record: Appointment) => { setEditingRecord(record); setIsModalOpen(true); }, []);
   const handleSaveModal = useCallback(async (formData: Partial<Appointment>) => {
     if (!formData) return;
-    updateMutation.mutate({ 
-      id: formData.id || `empty-${formData.time}`, 
-      updates: formData, 
-      dateStr: selectedDateStr,
-      barberId: formData.barberId
-    });
+    
+    const proceedSave = (shouldRegister: boolean) => {
+      const finalData = { ...formData };
+      
+      const saveAppt = () => {
+        updateMutation.mutate({ 
+          id: finalData.id || `empty-${finalData.time}`, 
+          updates: finalData, 
+          dateStr: selectedDateStr,
+          barberId: finalData.barberId
+        });
 
-    // Notificação de Sucesso
-    const timeLabel = (formData.time || "00:00").substring(0, 5);
-    setPeriodFilterName("Agendado com Sucesso");
-    setCopiedSlots([`${timeLabel} — ${formData.client?.toUpperCase() || "CLIENTE"}`]);
-    setCopied(true);
-    setTimeout(() => {
-      setCopied(false);
-      setCopiedSlots([]);
-      setPeriodFilterName("");
-    }, 2800);
+        // Notificação de Sucesso
+        const timeLabel = (finalData.time || "00:00").substring(0, 5);
+        setPeriodFilterName("Agendado com Sucesso");
+        setCopiedSlots([`${timeLabel} — ${finalData.client?.toUpperCase() || "CLIENTE"}`]);
+        setCopied(true);
+        setTimeout(() => {
+          setCopied(false);
+          setCopiedSlots([]);
+          setPeriodFilterName("");
+        }, 2800);
 
-    setIsModalOpen(false);
-    setEditingRecord(null);
-  }, [updateMutation, selectedDateStr]);
+        setIsModalOpen(false);
+        setEditingRecord(null);
+        setPendingRegistration(null);
+      };
+
+      if (shouldRegister && finalData.client) {
+        registerClientMutation.mutate(finalData.client, {
+          onSuccess: () => {
+            saveAppt();
+          }
+        });
+      } else {
+        saveAppt();
+      }
+    };
+
+    const cleanClientName = formData.client?.trimEnd();
+    if (cleanClientName && cleanClientName !== "---" && cleanClientName.toUpperCase() !== "PAUSA") {
+      const exists = clients?.some((c: any) => c.nome?.toLowerCase() === cleanClientName.toLowerCase());
+      if (!exists) {
+        setPendingRegistration({
+          clientName: cleanClientName,
+          onConfirm: () => proceedSave(true),
+          onCancelAction: () => proceedSave(false)
+        });
+        return;
+      }
+    }
+
+    proceedSave(false);
+  }, [updateMutation, selectedDateStr, clients]);
 
   const freeSlots = useMemo(() => slots.filter(s => s.isEmpty), [slots]);
   const daysInMonth = eachDayOfInterval({ start: startOfMonth(currentDate), end: endOfMonth(currentDate) });
@@ -1012,8 +1151,14 @@ export default function AgendaPage() {
       </AnimatePresence>
 
       <div className="space-y-4 md:space-y-0 md:bg-surface-section/30 md:rounded-[2rem] border-none overflow-visible mt-6 shadow-2xl shadow-black/20">
-        <div className="hidden md:grid md:grid-cols-[80px_1.5fr_1.2fr_1fr_100px_130px_100px] gap-4 bg-white/[0.02] border-none px-6 py-5 text-[10px] font-black text-text-secondary uppercase tracking-widest items-center rounded-t-[2rem]">
-          <div>Horário</div><div>Cliente</div><div>Procedimentos</div><div>Observações</div><div>Valor</div><div>Pagamento</div><div className="text-right pr-4">Ações</div>
+        <div className="hidden md:grid md:grid-cols-[85px_1.5fr_1.2fr_1fr_100px_140px_110px] gap-0 bg-white/[0.02] border-none px-6 py-4 text-[10px] font-black text-text-secondary uppercase tracking-widest items-center rounded-t-[2rem]">
+          <div className="px-4">Horário</div>
+          <div className="px-4">Cliente</div>
+          <div className="px-4">Procedimentos</div>
+          <div className="px-4">Observações</div>
+          <div className="px-4">Valor</div>
+          <div className="px-4">Pagamento</div>
+          <div className="text-right pr-8">Ações</div>
         </div>
         <div className="space-y-1 md:space-y-0 md:divide-y md:divide-white/[0.02] md:[&>*:last-child>div:first-child]:rounded-b-[2rem]">
           {isLoading ? ( 
@@ -1099,6 +1244,44 @@ export default function AgendaPage() {
               className="flex-1 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-[9px] font-black uppercase tracking-wider border-none transition-all active:scale-95 cursor-pointer"
             >
               Confirmar
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Auto Client Registration Confirm Modal */}
+      <Modal
+        isOpen={!!pendingRegistration}
+        onClose={() => {
+          if (pendingRegistration) pendingRegistration.onCancelAction();
+        }}
+        title="Cadastrar Novo Cliente?"
+      >
+        <div className="flex flex-col gap-4 py-1 text-center">
+          <p className="text-[11px] font-bold text-text-secondary leading-normal">
+            O cliente <span className="text-white font-black uppercase">"{pendingRegistration?.clientName}"</span> não está cadastrado.
+            <br />
+            Deseja cadastrá-lo automaticamente no sistema agora?
+          </p>
+
+          <div className="flex flex-col gap-2 w-full">
+            <button
+              onClick={() => {
+                if (pendingRegistration) pendingRegistration.onConfirm();
+              }}
+              disabled={registerClientMutation.isPending}
+              className="w-full py-2.5 rounded-xl bg-brand-primary text-surface-page text-[9px] font-black uppercase tracking-wider border-none transition-all active:scale-95 cursor-pointer"
+            >
+              {registerClientMutation.isPending ? "Cadastrando..." : "Sim, Cadastrar Cliente"}
+            </button>
+            
+            <button
+              onClick={() => {
+                if (pendingRegistration) pendingRegistration.onCancelAction();
+              }}
+              className="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-[9px] font-black uppercase tracking-wider border-none transition-all active:scale-95 cursor-pointer"
+            >
+              Não, Apenas Agendar (Sem Cadastrar)
             </button>
           </div>
         </div>

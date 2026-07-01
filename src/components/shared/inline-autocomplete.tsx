@@ -106,7 +106,7 @@ export function InlineAutocomplete({
       <span
         onClick={handleStartEdit}
         className={cn(
-          "cursor-pointer truncate block w-full hover:opacity-70 transition-opacity",
+          "cursor-pointer truncate flex items-center w-full h-full hover:opacity-70 transition-opacity",
           !value && "text-text-muted/40 italic font-medium",
           className
         )}
@@ -127,7 +127,7 @@ export function InlineAutocomplete({
         onKeyDown={handleKeyDown}
         onFocus={() => setIsOpen(true)}
         className={cn(
-          "w-full bg-surface-subtle border-none rounded px-2 py-0.5 outline-none focus:ring-1 focus:ring-brand-primary text-sm",
+          "w-full bg-transparent border-none outline-none focus:ring-0 text-sm",
           className
         )}
         autoComplete="off"

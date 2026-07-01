@@ -2,13 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { 
   LayoutDashboard, 
   Calendar, 
   Users, 
   Crown, 
   Scissors, 
-  Settings 
+  Settings,
+  RefreshCw
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,12 +19,21 @@ const navItems = [
   { href: "/", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/agenda", icon: Calendar, label: "Agenda" },
   { href: "/clientes", icon: Users, label: "Clientes" },
-  { href: "/barbeiros", icon: Scissors, label: "Barbeiros" },
   { href: "/planos", icon: Crown, label: "Planos" },
+  { href: "/barbeiros", icon: Scissors, label: "Barbeiros" },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const queryClient = useQueryClient();
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSync = async () => {
+    setIsSyncing(true);
+    await queryClient.invalidateQueries();
+    await new Promise(r => setTimeout(r, 800));
+    setIsSyncing(false);
+  };
 
   return (
     <aside className="hidden md:flex flex-col h-full bg-surface-section transition-all duration-300 w-16 hover:w-64 group/sidebar z-50 overflow-hidden border-none text-white">
@@ -76,7 +88,25 @@ export function Sidebar() {
         })}
       </nav>
 
-
+      {/* Bottom Sync Button */}
+      <div className="mt-auto mb-4 border-none">
+        <button
+          onClick={handleSync}
+          disabled={isSyncing}
+          className={cn(
+            "flex items-center w-full h-12 px-0 group-hover/sidebar:px-4 transition-all duration-200 relative text-text-secondary hover:bg-white/5 hover:text-white border-none bg-transparent cursor-pointer",
+            isSyncing && "pointer-events-none opacity-50"
+          )}
+          title="Sincronizar base de dados"
+        >
+          <div className="w-16 shrink-0 flex items-center justify-center">
+            <RefreshCw size={20} className={cn("text-brand-primary", isSyncing && "animate-spin")} />
+          </div>
+          <span className="opacity-0 group-hover/sidebar:opacity-100 transition-opacity text-xs font-bold uppercase tracking-wider whitespace-nowrap">
+            Sincronizar
+          </span>
+        </button>
+      </div>
     </aside>
   );
 }

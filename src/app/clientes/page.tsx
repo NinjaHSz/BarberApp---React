@@ -88,6 +88,14 @@ export default function ClientsPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncContacts, setSyncContacts] = useState<any[]>([]);
 
+  // State for Delete Confirmation Modal
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [clientToDelete, setClientToDelete] = useState<any>(null);
+
+  // State for Name Edit/Migration Modal
+  const [isEditNameModalOpen, setIsEditNameModalOpen] = useState(false);
+  const [pendingClientData, setPendingClientData] = useState<any>(null);
+
 
   const filteredClients = useMemo(() => {
     let result = [...clients];
@@ -113,36 +121,68 @@ export default function ClientsPage() {
   }, [clients]);
 
   const saveMutation = useMutation({
-    mutationFn: async (data: any) => {
-      if (data.id) {
-        const { error } = await supabase.from("clientes").update(data).eq("id", data.id);
+    mutationFn: async ({ data, migrate }: { data: any; migrate?: boolean }) => {
+      const cleanData = { ...data };
+      if (typeof cleanData.nome === "string") {
+        cleanData.nome = cleanData.nome.trimEnd();
+      }
+
+      const clientObj = cleanData.id ? clients.find(c => String(c.id) === String(cleanData.id)) : null;
+      const oldName = clientObj?.nome;
+
+      if (cleanData.id) {
+        const { error } = await supabase.from("clientes").update(cleanData).eq("id", cleanData.id);
         if (error) throw error;
+
+        if (migrate && oldName && cleanData.nome && oldName !== cleanData.nome) {
+          const newName = cleanData.nome;
+          await supabase.from("agendamentos_lucas").update({ cliente: newName }).ilike("cliente", oldName);
+          await supabase.from("agendamentos_joao_lucas").update({ cliente: newName }).ilike("cliente", oldName);
+        }
       } else {
-        const { error } = await supabase.from("clientes").insert([data]);
+        const { error } = await supabase.from("clientes").insert([cleanData]);
         if (error) throw error;
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
       setIsModalOpen(false);
       setEditingClient(null);
+      setIsEditNameModalOpen(false);
+      setPendingClientData(null);
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("clientes").delete().eq("id", id);
-      if (error) throw error;
+    mutationFn: async ({ id, deleteHistory }: { id: string, deleteHistory: boolean }) => {
+      const clientObj = clients.find(c => String(c.id) === String(id));
+      const { error: clientError } = await supabase.from("clientes").delete().eq("id", id);
+      if (clientError) throw clientError;
+
+      if (deleteHistory && clientObj?.nome) {
+        const clientName = clientObj.nome;
+        await supabase.from("agendamentos_lucas").delete().ilike("cliente", clientName);
+        await supabase.from("agendamentos_joao_lucas").delete().ilike("cliente", clientName);
+      }
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["clients"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      setIsDeleteModalOpen(false);
+      setClientToDelete(null);
+    },
+    onError: (err) => {
+      console.error(err);
+      alert("Erro ao excluir o cliente.");
+    }
   });
 
-  const handleDelete = (id: string, e: React.MouseEvent) => {
+  const handleDelete = (client: any, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (confirm("Deseja excluir este cliente e todo seu histórico?")) {
-      deleteMutation.mutate(id);
-    }
+    setClientToDelete(client);
+    setIsDeleteModalOpen(true);
   };
 
   const handleOpenModal = (client = null) => {
@@ -313,7 +353,7 @@ export default function ClientsPage() {
                   Perfil <ChevronRight size={10} />
                 </div>
                 <button 
-                  onClick={(e) => handleDelete(client.id, e)}
+                  onClick={(e) => handleDelete(client, e)}
                   className="p-2 text-text-muted hover:text-rose-500 transition-colors border-none"
                 >
                   <Trash2 size={14} />
@@ -324,94 +364,99 @@ export default function ClientsPage() {
         </div>
       ) : (
         <div className="bg-surface-section/30 rounded-[1.5rem] lg:rounded-[2rem] overflow-hidden shadow-2xl">
-          <div className="hidden md:grid grid-cols-[60px_1.5fr_1.2fr_1.5fr_1fr_1fr_120px] gap-4 px-8 py-5 text-[10px] font-black text-text-muted uppercase tracking-[0.2em] bg-white/[0.02]">
-            <div>Avatar</div>
-            <div>Nome</div>
-            <div>Telefone</div>
-            <div>Observações</div>
-            <div>Plano</div>
-            <div>Desde</div>
-            <div className="text-right">Ações</div>
+          <div className="hidden md:grid grid-cols-[60px_1.5fr_1.2fr_1.5fr_1fr_1fr_120px] gap-0 px-8 py-4 text-[10px] font-black text-text-muted uppercase tracking-[0.2em] bg-white/[0.02]">
+            <div className="px-4">Avatar</div>
+            <div className="px-4">Nome</div>
+            <div className="px-4">Telefone</div>
+            <div className="px-4">Observações</div>
+            <div className="px-4">Plano</div>
+            <div className="px-4">Desde</div>
+            <div className="text-right pr-8">Ações</div>
           </div>
           <div className="divide-y divide-white/[0.02]">
             {filteredClients.map((client) => (
-              <Link 
+              <div 
                 key={client.id}
-                href={`/clientes/${client.id}`}
-                className="flex flex-col md:grid md:grid-cols-[60px_1.5fr_1.2fr_1.5fr_1fr_1fr_120px] gap-3 md:gap-4 px-4 md:px-8 py-3 md:py-4 items-center hover:bg-white/[0.02] transition-colors group border-none"
+                className="flex flex-col md:grid md:grid-cols-[60px_1.5fr_1.2fr_1.5fr_1fr_1fr_120px] gap-0 px-4 md:px-8 h-12 items-stretch hover:bg-white/[0.01] transition-colors group relative border-none focus-within:z-[500] z-[1]"
               >
-                <div className="flex items-center gap-3 w-full md:w-auto">
-                  <div className="w-10 h-10 rounded-xl bg-surface-page flex items-center justify-center text-brand-primary font-black text-sm shadow-lg group-hover:scale-110 transition-transform shrink-0">
+                {/* Avatar */}
+                <div className="flex items-center px-4">
+                  <Link 
+                    href={`/clientes/${client.id}`}
+                    className="w-10 h-10 rounded-xl bg-surface-page flex items-center justify-center text-brand-primary font-black text-sm shadow-lg hover:scale-110 transition-transform shrink-0"
+                  >
                     {client.nome?.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1 md:hidden">
-                    <h3 className="text-white font-black text-xs uppercase tracking-tight group-hover:text-brand-primary transition-colors truncate">
-                      {client.nome}
-                    </h3>
-                  </div>
+                  </Link>
                 </div>
 
-                <div className="hidden md:block min-w-0">
-                  <h3 className="text-white font-black text-[13px] uppercase tracking-tight group-hover:text-brand-primary transition-colors truncate">
+                {/* Nome */}
+                <div className="h-full flex items-center px-4 relative min-w-0">
+                  <Link 
+                    href={`/clientes/${client.id}`}
+                    className="text-white font-black text-[13px] uppercase tracking-tight hover:text-brand-primary transition-colors truncate block w-full"
+                  >
                     {client.nome}
-                  </h3>
+                  </Link>
                 </div>
 
+                {/* Telefone */}
                 <div 
-                  className="hidden md:block min-w-0"
+                  className="h-full flex items-center px-4 transition-all focus-within:ring-2 focus-within:ring-inset focus-within:ring-brand-primary relative min-w-0"
                   onClick={(e) => {
-                    e.preventDefault();
                     e.stopPropagation();
                   }}
                 >
                   <InlineInput 
                     value={client.telefone || ""}
                     placeholder="Adicionar..."
-                    onSave={(val) => saveMutation.mutate({ id: client.id, telefone: val })}
-                    className="text-white font-bold h-auto w-auto inline-block focus:bg-white/5"
+                    onSave={(val) => saveMutation.mutate({ data: { id: client.id, telefone: val } })}
+                    className="text-white font-bold w-full h-full flex items-center text-xs"
                   />
                 </div>
 
-                <div className="hidden md:block w-full md:w-auto text-[10px] md:text-[11px] font-medium text-text-muted truncate italic px-1 md:px-0">
+                {/* Observações */}
+                <div className="h-full flex items-center px-4 text-[10px] md:text-[11px] font-medium text-text-muted truncate italic">
                   {client.observacoes_cliente || <span className="text-white/10">—</span>}
                 </div>
 
-                <div className="flex items-center md:justify-start gap-4 w-full md:w-auto px-1 md:px-0">
-                  <div className="flex items-center gap-2">
-                    <span className={cn(
-                      "px-2 md:px-3 py-0.5 md:py-1 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest",
-                      client.plano !== "Nenhum" ? "bg-brand-primary/10 text-brand-primary" : "bg-white/5 text-white/20"
-                    )}>
-                      {client.plano || "Nenhum"}
-                    </span>
-                  </div>
-                  {/* Join date - Desktop only */}
+                {/* Plano */}
+                <div className="h-full flex items-center px-4">
+                  <span className={cn(
+                    "px-2 md:px-3 py-0.5 md:py-1 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest",
+                    client.plano !== "Nenhum" ? "bg-brand-primary/10 text-brand-primary" : "bg-white/5 text-white/20"
+                  )}>
+                    {client.plano || "Nenhum"}
+                  </span>
                 </div>
 
-                <div className="hidden md:block text-[11px] font-black text-text-muted uppercase tracking-widest">
+                {/* Desde */}
+                <div className="h-full flex items-center px-4 text-[11px] font-black text-text-muted uppercase tracking-widest">
                   {client.created_at ? new Date(client.created_at).getFullYear() : "--"}
                 </div>
 
-                <div className="hidden md:flex items-center justify-end gap-2">
+                {/* Ações */}
+                <div className="h-full flex items-center justify-end px-4 gap-2">
                   <button 
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       handleOpenModal(client);
                     }}
-                    className="p-2 text-text-muted hover:text-white transition-colors border-none"
+                    className="p-2 text-text-muted hover:text-white transition-colors border-none cursor-pointer shrink-0"
                   >
                     <Edit2 size={14} />
                   </button>
                   <button 
-                    onClick={(e) => handleDelete(client.id, e)}
-                    className="p-2 text-text-muted hover:text-rose-500 transition-colors border-none"
+                    onClick={(e) => handleDelete(client, e)}
+                    className="p-2 text-text-muted hover:text-rose-500 transition-colors border-none cursor-pointer shrink-0"
                   >
                     <Trash2 size={14} />
                   </button>
-                  <ChevronRight size={14} className="text-text-muted group-hover:text-brand-primary group-hover:translate-x-1 transition-all" />
+                  <Link href={`/clientes/${client.id}`} className="text-text-muted hover:text-brand-primary hover:translate-x-1 transition-all pl-1 shrink-0">
+                    <ChevronRight size={14} />
+                  </Link>
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         </div>
@@ -435,7 +480,16 @@ export default function ClientsPage() {
             observacoes_cliente: String(formData.get("observacoes_cliente")),
           };
           if (editingClient?.id) data.id = editingClient.id;
-          saveMutation.mutate(data);
+
+          const oldName = editingClient?.nome;
+          const newName = data.nome?.trimEnd();
+
+          if (editingClient?.id && oldName && newName && oldName !== newName) {
+            setPendingClientData(data);
+            setIsEditNameModalOpen(true);
+          } else {
+            saveMutation.mutate({ data });
+          }
         }} className="flex flex-col gap-3 py-2 w-full">
           <div className="figma-form-group">
             <label className="figma-form-label">Nome Completo</label>
@@ -476,6 +530,96 @@ export default function ClientsPage() {
       </Modal>
 
       {/* (removed Sincronização Inteligente Modal) */}
+      
+      {/* Delete Client Confirmation Modal */}
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setClientToDelete(null);
+        }}
+        title="Excluir Cliente"
+      >
+        <div className="flex flex-col gap-4 py-1 text-center">
+          <p className="text-[11px] font-bold text-text-secondary leading-normal">
+            Deseja mesmo excluir o cliente <span className="text-white font-black uppercase">"{clientToDelete?.nome}"</span>?
+          </p>
+
+          <div className="flex flex-col gap-2 w-full">
+            <button
+              onClick={() => deleteMutation.mutate({ id: clientToDelete.id, deleteHistory: true })}
+              disabled={deleteMutation.isPending}
+              className="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[9px] font-black uppercase tracking-wider border-none transition-all active:scale-95 cursor-pointer"
+            >
+              {deleteMutation.isPending ? "Excluindo..." : "Excluir Cliente e Apagar Todo Histórico"}
+            </button>
+            
+            <button
+              onClick={() => deleteMutation.mutate({ id: clientToDelete.id, deleteHistory: false })}
+              disabled={deleteMutation.isPending}
+              className="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-[9px] font-black uppercase tracking-wider border-none transition-all active:scale-95 cursor-pointer"
+            >
+              Apenas Excluir Cadastro (Manter Histórico)
+            </button>
+
+            <button
+              onClick={() => {
+                setIsDeleteModalOpen(false);
+                setClientToDelete(null);
+              }}
+              className="w-full py-2 bg-transparent text-text-muted hover:text-white text-[9px] font-black uppercase tracking-wider border-none cursor-pointer"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Edit Name Migration Confirm Modal */}
+      <Modal
+        isOpen={isEditNameModalOpen}
+        onClose={() => {
+          setIsEditNameModalOpen(false);
+          setPendingClientData(null);
+        }}
+        title="Atualizar Nome e Histórico"
+      >
+        <div className="flex flex-col gap-4 py-1 text-center">
+          <p className="text-[11px] font-bold text-text-secondary leading-normal">
+            Você está alterando o nome de <span className="text-white font-black uppercase">"{editingClient?.nome}"</span> para <span className="text-white font-black uppercase">"{pendingClientData?.nome}"</span>.
+            <br />
+            Deseja migrar todo o histórico de agendamentos antigos para o novo nome?
+          </p>
+
+          <div className="flex flex-col gap-2 w-full">
+            <button
+              onClick={() => saveMutation.mutate({ data: pendingClientData, migrate: true })}
+              disabled={saveMutation.isPending}
+              className="w-full py-2.5 rounded-xl bg-brand-primary text-surface-page text-[9px] font-black uppercase tracking-wider border-none transition-all active:scale-95 cursor-pointer"
+            >
+              {saveMutation.isPending ? "Salvando..." : "Sim, Salvar e Migrar Histórico"}
+            </button>
+            
+            <button
+              onClick={() => saveMutation.mutate({ data: pendingClientData, migrate: false })}
+              disabled={saveMutation.isPending}
+              className="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-[9px] font-black uppercase tracking-wider border-none transition-all active:scale-95 cursor-pointer"
+            >
+              Apenas Mudar Nome (Manter Histórico Separado)
+            </button>
+
+            <button
+              onClick={() => {
+                setIsEditNameModalOpen(false);
+                setPendingClientData(null);
+              }}
+              className="w-full py-2 bg-transparent text-text-muted hover:text-white text-[9px] font-black uppercase tracking-wider border-none cursor-pointer"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

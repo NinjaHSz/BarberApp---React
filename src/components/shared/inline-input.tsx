@@ -52,7 +52,7 @@ export const InlineInput = memo(function InlineInputComponent({
       <div
         onClick={() => setIsEditing(true)}
         className={cn(
-          "cursor-text whitespace-nowrap overflow-hidden text-ellipsis rounded px-1 -mx-1 hover:bg-white/5 transition-all min-h-[1.5em] flex items-center",
+          "cursor-text whitespace-nowrap overflow-hidden text-ellipsis rounded px-1 -mx-1 hover:bg-white/5 transition-all min-h-[1.5em] flex items-center w-full h-full",
           className
         )}
       >
@@ -73,7 +73,7 @@ export const InlineInput = memo(function InlineInputComponent({
       onKeyDown={handleKeyDown}
       onFocus={(e) => e.target.select()}
       className={cn(
-        "bg-white/10 outline-none rounded px-1 -mx-1 w-full border-none focus:ring-1 focus:ring-brand-primary/50 text-inherit font-inherit",
+        "bg-transparent outline-none w-full border-none focus:ring-0 text-inherit font-inherit",
         className
       )}
     />

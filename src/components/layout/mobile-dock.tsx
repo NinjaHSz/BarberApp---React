@@ -16,8 +16,8 @@ const navItems = [
   { href: "/", icon: LayoutDashboard, label: "Home" },
   { href: "/agenda", icon: Calendar, label: "Agenda" },
   { href: "/clientes", icon: Users, label: "Clientes" },
-  { href: "/barbeiros", icon: Scissors, label: "Barbeiros" },
   { href: "/planos", icon: Crown, label: "Planos" },
+  { href: "/barbeiros", icon: Scissors, label: "Barbeiros" },
 ];
 
 export function MobileDock() {

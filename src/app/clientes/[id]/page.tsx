@@ -12,6 +12,7 @@ import { useParams } from "next/navigation";
 import { InlineInput } from "@/components/shared/inline-input";
 import { InlineAutocomplete } from "@/components/shared/inline-autocomplete";
 import { PaymentSelector } from "@/components/shared/payment-selector";
+import { Modal } from "@/components/shared/modal";
 
 export default function ClientProfilePage() {
   const { id } = useParams();
@@ -23,6 +24,10 @@ export default function ClientProfilePage() {
 
   const [showPreset, setShowPreset] = useState(false);
   const [dbUsage, setDbUsage] = useState(0);
+  
+  // Pending Name Migration State
+  const [isNameModalOpen, setIsNameModalOpen] = useState(false);
+  const [pendingName, setPendingName] = useState("");
 
   const client = useMemo(() => clients.find(c => String(c.id) === id), [clients, id]);
 
@@ -124,6 +129,47 @@ export default function ClientProfilePage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["clients"] }),
   });
 
+  const updateClientAndMigrateHistoryMutation = useMutation({
+    mutationFn: async ({ newName, migrate }: { newName: string, migrate: boolean }) => {
+      const { error: clientError } = await supabase
+        .from("clientes")
+        .update({ nome: newName })
+        .eq("id", id);
+      if (clientError) throw clientError;
+
+      if (migrate && client?.nome) {
+        const oldName = client.nome;
+        const { error: err1 } = await supabase
+          .from("agendamentos_lucas")
+          .update({ cliente: newName })
+          .ilike("cliente", oldName);
+        if (err1) throw err1;
+
+        const { error: err2 } = await supabase
+          .from("agendamentos_joao_lucas")
+          .update({ cliente: newName })
+          .ilike("cliente", oldName);
+        if (err2) throw err2;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      setIsNameModalOpen(false);
+      setPendingName("");
+    },
+    onError: (err: any) => {
+      console.error("Name update mutation error detail:", err.message || err.details || err);
+      alert(`Erro ao atualizar o nome do cliente: ${err.message || JSON.stringify(err)}`);
+    }
+  });
+
+  const handleStartNameUpdate = (v: string) => {
+    if (!v.trim() || v.trim() === client?.nome) return;
+    setPendingName(v.trim());
+    setIsNameModalOpen(true);
+  };
+
   const updateAppointmentMutation = useMutation({
     mutationFn: async ({ id: apptId, updates, barberId }: { id: string, updates: any, barberId?: string | number | null }) => {
       const dbUpdates: any = {};
@@ -166,11 +212,13 @@ export default function ClientProfilePage() {
         </div>
         <div className="flex-1 text-center sm:text-left space-y-1">
           <div className="flex flex-wrap justify-center sm:justify-start items-center gap-3">
-            <InlineInput
-              value={client.nome}
-              onSave={(v) => updateMutation.mutate({ nome: v })}
-              className="text-3xl font-display font-black text-white bg-transparent p-0 uppercase tracking-tighter hover:text-brand-primary transition-colors h-auto w-auto"
-            />
+            <div className="min-w-[200px] sm:min-w-[300px]">
+              <InlineInput
+                value={client.nome}
+                onSave={handleStartNameUpdate}
+                className="text-3xl font-display font-black text-white bg-transparent p-0 uppercase tracking-tighter hover:text-brand-primary transition-colors h-auto w-full"
+              />
+            </div>
             {client.plano !== "Nenhum" && (
               <span className="px-2 py-0.5 bg-brand-primary/10 text-brand-primary text-[8px] font-black uppercase rounded border border-brand-primary/20">VIP</span>
             )}
@@ -436,6 +484,50 @@ export default function ClientProfilePage() {
             )}
          </div>
       </div>
+
+      {/* Name Change Migration Confirm Modal */}
+      <Modal
+        isOpen={isNameModalOpen}
+        onClose={() => {
+          setIsNameModalOpen(false);
+          setPendingName("");
+        }}
+        title="Atualizar Nome e Histórico"
+      >
+        <div className="flex flex-col gap-4 py-1 text-center">
+          <p className="text-[11px] font-bold text-text-secondary leading-normal">
+            Deseja migrar todos os agendamentos antigos de <span className="text-white font-black uppercase">"{client.nome}"</span> para o novo nome <span className="text-white font-black uppercase">"{pendingName}"</span>?
+          </p>
+
+          <div className="flex flex-col gap-2 w-full">
+            <button
+              onClick={() => updateClientAndMigrateHistoryMutation.mutate({ newName: pendingName, migrate: true })}
+              disabled={updateClientAndMigrateHistoryMutation.isPending}
+              className="w-full py-2.5 rounded-xl bg-brand-primary text-surface-page text-[9px] font-black uppercase tracking-wider border-none transition-all active:scale-95 cursor-pointer"
+            >
+              {updateClientAndMigrateHistoryMutation.isPending ? "Migrando..." : "Sim, Migrar Todo o Histórico"}
+            </button>
+            
+            <button
+              onClick={() => updateClientAndMigrateHistoryMutation.mutate({ newName: pendingName, migrate: false })}
+              disabled={updateClientAndMigrateHistoryMutation.isPending}
+              className="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-[9px] font-black uppercase tracking-wider border-none transition-all active:scale-95 cursor-pointer"
+            >
+              Apenas Mudar Nome (Manter Histórico Separado)
+            </button>
+
+            <button
+              onClick={() => {
+                setIsNameModalOpen(false);
+                setPendingName("");
+              }}
+              className="w-full py-2 bg-transparent text-text-muted hover:text-white text-[9px] font-black uppercase tracking-wider border-none cursor-pointer"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
