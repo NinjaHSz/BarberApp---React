@@ -366,8 +366,16 @@ export default function ClientProfilePage() {
     <div className="px-4 py-6 sm:px-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-center gap-6">
-        <div className="w-24 h-24 rounded-[2rem] bg-surface-section flex items-center justify-center text-brand-primary text-4xl font-black shadow-2xl shrink-0">
-          {client.nome?.charAt(0).toUpperCase()}
+        <div className="w-24 h-24 rounded-[2rem] bg-surface-section flex items-center justify-center text-brand-primary text-4xl font-black shadow-2xl shrink-0 overflow-hidden">
+          {client.foto_url ? (
+            <img 
+              src={client.foto_url} 
+              alt={client.nome} 
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            client.nome?.charAt(0).toUpperCase()
+          )}
         </div>
         <div className="flex-1 text-center sm:text-left space-y-1">
           <div className="flex flex-wrap justify-center sm:justify-start items-center gap-3">

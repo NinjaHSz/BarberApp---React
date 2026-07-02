@@ -88,6 +88,7 @@ export interface DbAppointment {
   forma_pagamento: string | null;
   barbeiro_id: string | null;
   barbeiro: string | null;
+  whatsapp_enviado: boolean | null;
 }
 
 export interface Appointment {
@@ -100,6 +101,7 @@ export interface Appointment {
   value: number;
   paymentMethod: string;
   barberId: string | null;
+  whatsappSent: boolean;
 }
 
 export function useAppointments() {
@@ -164,6 +166,7 @@ export function useAppointments() {
           value: Number(r.valor) || 0,
           paymentMethod: r.forma_pagamento || "PIX",
           barberId: barberId,
+          whatsappSent: r.whatsapp_enviado || false,
         };
       });
     },
@@ -174,3 +177,48 @@ export function useAppointments() {
 export function useSupabase() {
   return supabase;
 }
+
+export interface WaitlistItem {
+  id: string;
+  data: string;
+  cliente_nome: string;
+  sem_preferencia: boolean;
+  hora_inicio: string | null;
+  hora_fim: string | null;
+}
+
+export function useWaitlist(dateStr: string) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`waitlist_${dateStr}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "lista_espera", filter: `data=eq.${dateStr}` },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["waitlist", dateStr] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient, dateStr]);
+
+  return useQuery<WaitlistItem[]>({
+    queryKey: ["waitlist", dateStr],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("lista_espera")
+        .select("*")
+        .eq("data", dateStr)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data || []) as WaitlistItem[];
+    },
+    staleTime: 1000 * 30,
+  });
+}
+

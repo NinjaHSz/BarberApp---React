@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
-import { cn } from "@/lib/utils";
+import { useState, useRef, useMemo } from "react";
+import { cn, normalizeText } from "@/lib/utils";
 import { type Suggestion } from "./autocomplete-input";
 
 interface InlineAutocompleteProps {
@@ -25,10 +25,13 @@ export function InlineAutocomplete({
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Sync external value changes
-  useEffect(() => {
-    if (!isEditing) setInputValue(value || "");
-  }, [value, isEditing]);
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
+    if (!isEditing) {
+      setInputValue(value || "");
+    }
+  }
 
   const filteredSuggestions = useMemo(() => {
     // Treat placeholder text as empty string to show more suggestions on focus
@@ -37,7 +40,7 @@ export function InlineAutocomplete({
     
     if (!search) return suggestions.slice(0, 15);
     return suggestions
-      .filter((s) => s.label.toLowerCase().includes(search.toLowerCase()))
+      .filter((s) => normalizeText(s.label).includes(normalizeText(search)))
       .slice(0, 15);
   }, [inputValue, suggestions, placeholder]);
 
@@ -64,8 +67,8 @@ export function InlineAutocomplete({
     const trimmedIn = inputValue.trim();
     const trimmedVal = (value || "").trim();
     if (trimmedIn !== trimmedVal) {
-      const match = suggestions.find(s => s.label.toLowerCase().trim() === trimmedIn.toLowerCase());
-      onSave(trimmedIn, match);
+      const match = suggestions.find(s => normalizeText(s.label.trim()) === normalizeText(trimmedIn));
+      onSave(match ? match.label : trimmedIn, match);
     }
   };
 
@@ -79,8 +82,8 @@ export function InlineAutocomplete({
         const trimmedIn = inputValue.trim();
         const trimmedVal = (value || "").trim();
         if (trimmedIn !== trimmedVal) {
-          const match = suggestions.find(s => s.label.toLowerCase().trim() === trimmedIn.toLowerCase());
-          onSave(trimmedIn, match);
+          const match = suggestions.find(s => normalizeText(s.label.trim()) === normalizeText(trimmedIn));
+          onSave(match ? match.label : trimmedIn, match);
         }
       }
       e.preventDefault();
@@ -96,7 +99,7 @@ export function InlineAutocomplete({
     const val = e.target.value;
     setInputValue(val);
     const matches = val
-      ? suggestions.filter((s) => s.label.toLowerCase().includes(val.toLowerCase()))
+      ? suggestions.filter((s) => normalizeText(s.label).includes(normalizeText(val)))
       : suggestions;
     setIsOpen(matches.length > 0);
   };

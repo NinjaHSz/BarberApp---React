@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import { cn } from "@/lib/utils";
+import { cn, normalizeText } from "@/lib/utils";
 
 export interface Suggestion<T = unknown> {
   id: string;
@@ -35,7 +35,7 @@ export function AutocompleteInput<T = unknown>({
   const filteredSuggestions = useMemo(() => {
     if (!value) return suggestions.slice(0, 8);
     return suggestions.filter((s) =>
-      s.label.toLowerCase().includes(value.toLowerCase())
+      normalizeText(s.label).includes(normalizeText(value))
     );
   }, [value, suggestions]);
 
@@ -69,7 +69,7 @@ export function AutocompleteInput<T = unknown>({
     
     const trimmed = value.trim();
     const match = suggestions.find(
-      (s) => s.label.toLowerCase().trim() === trimmed.toLowerCase()
+      (s) => normalizeText(s.label.trim()) === normalizeText(trimmed)
     );
     if (match && trimmed !== "") {
       onSelect(match);
@@ -84,7 +84,7 @@ export function AutocompleteInput<T = unknown>({
         onChange={(e) => {
           const val = e.target.value;
           onChange(val);
-          const hasMatches = val ? suggestions.some(s => s.label.toLowerCase().includes(val.toLowerCase())) : suggestions.length > 0;
+          const hasMatches = val ? suggestions.some(s => normalizeText(s.label).includes(normalizeText(val))) : suggestions.length > 0;
           setIsOpen(hasMatches);
         }}
         onKeyDown={handleKeyDown}

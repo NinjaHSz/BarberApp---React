@@ -73,7 +73,7 @@ export const InlineInput = memo(function InlineInputComponent({
       onKeyDown={handleKeyDown}
       onFocus={(e) => e.target.select()}
       className={cn(
-        "bg-transparent outline-none w-full border-none focus:ring-0 text-inherit font-inherit",
+        "bg-surface-page/50 outline-none w-full border border-white/10 focus:border-brand-primary/40 focus:ring-1 focus:ring-brand-primary/40 rounded px-1.5 py-0.5 text-inherit font-inherit",
         className
       )}
     />

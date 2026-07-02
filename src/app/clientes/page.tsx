@@ -385,41 +385,72 @@ export default function ClientsPage() {
                 className="flex flex-col md:grid md:grid-cols-[60px_1.5fr_1.2fr_1.5fr_1fr_1fr_120px] gap-3 md:gap-0 px-4 md:px-8 py-4 md:py-0 md:h-12 items-start md:items-center hover:bg-white/[0.01] transition-colors group relative border-none focus-within:z-[500] z-[1]"
               >
                 {/* Mobile Top Row: Avatar + Name + Plan Badge */}
-                <div className="flex items-center justify-between w-full md:w-auto md:contents gap-3">
+                <div className="flex md:hidden items-center justify-between w-full gap-3">
                   <div className="flex items-center gap-3">
                     {/* Avatar */}
-                    <div className="flex items-center shrink-0 md:px-4">
-                      <Link 
-                        href={`/clientes/${client.id}`}
-                        className="w-10 h-10 rounded-xl bg-surface-page flex items-center justify-center text-brand-primary font-black text-sm shadow-lg hover:scale-110 transition-transform shrink-0"
-                      >
-                        {client.nome?.charAt(0).toUpperCase()}
-                      </Link>
-                    </div>
+                    <Link 
+                      href={`/clientes/${client.id}`}
+                      className="w-10 h-10 rounded-xl bg-surface-page flex items-center justify-center text-brand-primary font-black text-sm shadow-lg hover:scale-110 transition-transform shrink-0 overflow-hidden"
+                    >
+                      {client.foto_url ? (
+                        <img 
+                          src={client.foto_url} 
+                          alt={client.nome} 
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        client.nome?.charAt(0).toUpperCase()
+                      )}
+                    </Link>
 
                     {/* Nome */}
-                    <div className="flex items-center md:px-4 min-w-0">
-                      <Link 
-                        href={`/clientes/${client.id}`}
-                        className="text-white font-black text-[13px] uppercase tracking-tight hover:text-brand-primary transition-colors truncate block max-w-[180px] md:max-w-none"
-                      >
-                        {client.nome}
-                      </Link>
-                    </div>
+                    <Link 
+                      href={`/clientes/${client.id}`}
+                      className="text-white font-black text-[13px] uppercase tracking-tight hover:text-brand-primary transition-colors truncate block max-w-[180px]"
+                    >
+                      {client.nome}
+                    </Link>
                   </div>
 
                   {/* Plano */}
-                  <div className="flex items-center md:px-4 shrink-0">
-                    <span className={cn(
-                      "px-2.5 py-0.5 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest",
-                      client.plano !== "Nenhum" ? "bg-brand-primary/10 text-brand-primary" : "bg-white/5 text-white/20"
-                    )}>
-                      {client.plano || "Nenhum"}
-                    </span>
-                  </div>
+                  <span className={cn(
+                    "px-2.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest",
+                    client.plano !== "Nenhum" ? "bg-brand-primary/10 text-brand-primary" : "bg-white/5 text-white/20"
+                  )}>
+                    {client.plano || "Nenhum"}
+                  </span>
                 </div>
 
-                {/* Telefone */}
+                {/* Desktop Grid Columns */}
+                {/* 1. Avatar */}
+                <div className="hidden md:flex items-center shrink-0 md:px-4">
+                  <Link 
+                    href={`/clientes/${client.id}`}
+                    className="w-10 h-10 rounded-xl bg-surface-page flex items-center justify-center text-brand-primary font-black text-sm shadow-lg hover:scale-110 transition-transform shrink-0 overflow-hidden"
+                  >
+                    {client.foto_url ? (
+                      <img 
+                        src={client.foto_url} 
+                        alt={client.nome} 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      client.nome?.charAt(0).toUpperCase()
+                    )}
+                  </Link>
+                </div>
+
+                {/* 2. Nome */}
+                <div className="hidden md:flex items-center md:px-4 min-w-0">
+                  <Link 
+                    href={`/clientes/${client.id}`}
+                    className="text-white font-black text-[13px] uppercase tracking-tight hover:text-brand-primary transition-colors truncate block"
+                  >
+                    {client.nome}
+                  </Link>
+                </div>
+
+                {/* 3. Telefone */}
                 <div 
                   className="flex items-center md:px-4 transition-all focus-within:ring-2 focus-within:ring-inset focus-within:ring-brand-primary relative min-w-0 w-full md:w-auto"
                   onClick={(e) => {
@@ -434,12 +465,22 @@ export default function ClientsPage() {
                   />
                 </div>
 
-                {/* Observações */}
+                {/* 4. Observações */}
                 <div className="hidden md:flex items-center md:px-4 text-[10px] md:text-[11px] font-medium text-text-muted truncate italic">
                   {client.observacoes_cliente || <span className="text-white/10">—</span>}
                 </div>
 
-                {/* Desde */}
+                {/* 5. Plano */}
+                <div className="hidden md:flex items-center md:px-4 shrink-0">
+                  <span className={cn(
+                    "px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest",
+                    client.plano !== "Nenhum" ? "bg-brand-primary/10 text-brand-primary" : "bg-white/5 text-white/20"
+                  )}>
+                    {client.plano || "Nenhum"}
+                  </span>
+                </div>
+
+                {/* 6. Desde */}
                 <div className="hidden md:flex items-center md:px-4 text-[11px] font-black text-text-muted uppercase tracking-widest">
                   {client.created_at ? new Date(client.created_at).getFullYear() : "--"}
                 </div>

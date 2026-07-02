@@ -44,6 +44,7 @@ import { type Suggestion } from "@/components/shared/autocomplete-input";
 import { PaymentSelector } from "@/components/shared/payment-selector";
 import Link from "next/link";
 import { AppointmentForm } from "./AppointmentForm";
+import { WaitlistPanel } from "@/components/shared/waitlist-panel";
 import { useAgenda } from "@/lib/contexts/agenda-context";
 
 // --- Types ---
@@ -58,6 +59,7 @@ interface Appointment {
   paymentMethod: string;
   isEmpty?: boolean;
   barberId?: number;
+  whatsappSent?: boolean;
 }
 
 // --- Components ---
@@ -87,6 +89,17 @@ const RecordRow = memo(function RecordRowComponent({
 }) {
   const isEmpty = record.isEmpty;
   const isBreak = record.client === "PAUSA";
+  const [confirmingWhatsApp, setConfirmingWhatsApp] = useState(false);
+
+  const handleWhatsAppClick = () => {
+    if (!confirmingWhatsApp) {
+      setConfirmingWhatsApp(true);
+      setTimeout(() => setConfirmingWhatsApp(false), 4000);
+    } else {
+      onSendWhatsApp(record);
+      setConfirmingWhatsApp(false);
+    }
+  };
 
   const clientObj = useMemo(() => {
     if (isEmpty || isBreak) return null;
@@ -300,13 +313,22 @@ const RecordRow = memo(function RecordRowComponent({
             <>
               {hasPhone && (
                 <button 
-                  onClick={() => onSendWhatsApp(record)}
-                  className="w-8 h-8 rounded-xl bg-white/5 text-[#25D366]/70 hover:bg-[#25D366] hover:text-surface-page transition-all flex items-center justify-center border-none shrink-0"
+                  onClick={handleWhatsAppClick}
+                  className={cn(
+                    "w-8 h-8 rounded-xl bg-white/5 transition-all flex items-center justify-center border-none shrink-0",
+                    record.whatsappSent 
+                      ? "text-yellow-500 hover:bg-yellow-500 hover:text-surface-page" 
+                      : "text-[#25D366]/70 hover:bg-[#25D366] hover:text-surface-page"
+                  )}
                   title="Enviar Lembrete WhatsApp"
                 >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="fill-current">
-                    <path d="M17.472 14.382C17.175 14.233 15.714 13.515 15.442 13.415C15.169 13.316 14.971 13.267 14.772 13.565C14.575 13.862 14.005 14.531 13.832 14.729C13.659 14.928 13.485 14.952 13.188 14.804C12.891 14.654 11.933 14.341 10.798 13.329C9.91501 12.541 9.31801 11.568 9.14501 11.27C8.97201 10.973 9.12701 10.812 9.27501 10.664C9.40901 10.531 9.57301 10.317 9.72101 10.144C9.87001 9.97004 9.91901 9.84604 10.019 9.64704C10.118 9.44904 10.069 9.27604 9.99401 9.12704C9.91901 8.97804 9.32501 7.51504 9.07801 6.92004C8.83601 6.34104 8.59101 6.42004 8.40901 6.41004C8.23601 6.40204 8.03801 6.40004 7.83901 6.40004C7.64101 6.40004 7.31901 6.47404 7.04701 6.77204C6.77501 7.06904 6.00701 7.78804 6.00701 9.25104C6.00701 10.713 7.07201 12.126 7.22001 12.325C7.36901 12.523 9.31601 15.525 12.297 16.812C13.006 17.118 13.559 17.301 13.991 17.437C14.703 17.664 15.351 17.632 15.862 17.555C16.433 17.47 17.62 16.836 17.868 16.142C18.116 15.448 18.116 14.853 18.041 14.729C17.967 14.605 17.77 14.531 17.472 14.382ZM12.05 21.785H12.046C10.2758 21.7852 8.53809 21.3092 7.01501 20.407L6.65401 20.193L2.91301 21.175L3.91101 17.527L3.67601 17.153C2.68645 15.5773 2.16295 13.7537 2.16601 11.893C2.16701 6.44304 6.60201 2.00904 12.054 2.00904C14.694 2.00904 17.176 3.03904 19.042 4.90704C19.9627 5.82366 20.6924 6.91377 21.189 8.11428C21.6856 9.3148 21.9392 10.6019 21.935 11.901C21.932 17.351 17.498 21.785 12.05 21.785ZM20.463 3.48804C19.3612 2.37896 18.0502 1.49958 16.6061 0.900841C15.162 0.302105 13.6133 -0.00407625 12.05 4.09775e-05C5.49501 4.09775e-05 0.160007 5.33504 0.157007 11.892C0.157007 13.988 0.704007 16.034 1.74501 17.837L0.0570068 24L6.36201 22.346C8.1056 23.296 10.0594 23.7938 12.045 23.794H12.05C18.604 23.794 23.94 18.459 23.943 11.901C23.9478 10.3383 23.6428 8.79014 23.0454 7.34607C22.4481 5.90201 21.5704 4.59071 20.463 3.48804Z" fill="currentColor"/>
-                  </svg>
+                  {confirmingWhatsApp ? (
+                    <span className="font-black text-[13px] leading-none animate-pulse">?</span>
+                  ) : (
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="fill-current">
+                      <path d="M17.472 14.382C17.175 14.233 15.714 13.515 15.442 13.415C15.169 13.316 14.971 13.267 14.772 13.565C14.575 13.862 14.005 14.531 13.832 14.729C13.659 14.928 13.485 14.952 13.188 14.804C12.891 14.654 11.933 14.341 10.798 13.329C9.91501 12.541 9.31801 11.568 9.14501 11.27C8.97201 10.973 9.12701 10.812 9.27501 10.664C9.40901 10.531 9.57301 10.317 9.72101 10.144C9.87001 9.97004 9.91901 9.84604 10.019 9.64704C10.118 9.44904 10.069 9.27604 9.99401 9.12704C9.91901 8.97804 9.32501 7.51504 9.07801 6.92004C8.83601 6.34104 8.59101 6.42004 8.40901 6.41004C8.23601 6.40204 8.03801 6.40004 7.83901 6.40004C7.64101 6.40004 7.31901 6.47404 7.04701 6.77204C6.77501 7.06904 6.00701 7.78804 6.00701 9.25104C6.00701 10.713 7.07201 12.126 7.22001 12.325C7.36901 12.523 9.31601 15.525 12.297 16.812C13.006 17.118 13.559 17.301 13.991 17.437C14.703 17.664 15.351 17.632 15.862 17.555C16.433 17.47 17.62 16.836 17.868 16.142C18.116 15.448 18.116 14.853 18.041 14.729C17.967 14.605 17.77 14.531 17.472 14.382ZM12.05 21.785H12.046C10.2758 21.7852 8.53809 21.3092 7.01501 20.407L6.65401 20.193L2.91301 21.175L3.91101 17.527L3.67601 17.153C2.68645 15.5773 2.16295 13.7537 2.16601 11.893C2.16701 6.44304 6.60201 2.00904 12.054 2.00904C14.694 2.00904 17.176 3.03904 19.042 4.90704C19.9627 5.82366 20.6924 6.91377 21.189 8.11428C21.6856 9.3148 21.9392 10.6019 21.935 11.901C21.932 17.351 17.498 21.785 12.05 21.785ZM20.463 3.48804C19.3612 2.37896 18.0502 1.49958 16.6061 0.900841C15.162 0.302105 13.6133 -0.00407625 12.05 4.09775e-05C5.49501 4.09775e-05 0.160007 5.33504 0.157007 11.892C0.157007 13.988 0.704007 16.034 1.74501 17.837L0.0570068 24L6.36201 22.346C8.1056 23.296 10.0594 23.7938 12.045 23.794H12.05C18.604 23.794 23.94 18.459 23.943 11.901C23.9478 10.3383 23.6428 8.79014 23.0454 7.34607C22.4481 5.90201 21.5704 4.59071 20.463 3.48804Z" fill="currentColor"/>
+                    </svg>
+                  )}
                 </button>
               )}
               <button 
@@ -344,10 +366,20 @@ const RecordRow = memo(function RecordRowComponent({
           {!isEmpty ? (
             <div className="flex gap-2">
                {hasPhone && (
-                 <button onClick={() => onSendWhatsApp(record)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-subtle text-[#25D366]/70 active:scale-90 border-none">
-                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="fill-current">
-                     <path d="M17.472 14.382C17.175 14.233 15.714 13.515 15.442 13.415C15.169 13.316 14.971 13.267 14.772 13.565C14.575 13.862 14.005 14.531 13.832 14.729C13.659 14.928 13.485 14.952 13.188 14.804C12.891 14.654 11.933 14.341 10.798 13.329C9.91501 12.541 9.31801 11.568 9.14501 11.27C8.97201 10.973 9.12701 10.812 9.27501 10.664C9.40901 10.531 9.57301 10.317 9.72101 10.144C9.87001 9.97004 9.91901 9.84604 10.019 9.64704C10.118 9.44904 10.069 9.27604 9.99401 9.12704C9.91901 8.97804 9.32501 7.51504 9.07801 6.92004C8.83601 6.34104 8.59101 6.42004 8.40901 6.41004C8.23601 6.40204 8.03801 6.40004 7.83901 6.40004C7.64101 6.40004 7.31901 6.47404 7.04701 6.77204C6.77501 7.06904 6.00701 7.78804 6.00701 9.25104C6.00701 10.713 7.07201 12.126 7.22001 12.325C7.36901 12.523 9.31601 15.525 12.297 16.812C13.006 17.118 13.559 17.301 13.991 17.437C14.703 17.664 15.351 17.632 15.862 17.555C16.433 17.47 17.62 16.836 17.868 16.142C18.116 15.448 18.116 14.853 18.041 14.729C17.967 14.605 17.77 14.531 17.472 14.382ZM12.05 21.785H12.046C10.2758 21.7852 8.53809 21.3092 7.01501 20.407L6.65401 20.193L2.91301 21.175L3.91101 17.527L3.67601 17.153C2.68645 15.5773 2.16295 13.7537 2.16601 11.893C2.16701 6.44304 6.60201 2.00904 12.054 2.00904C14.694 2.00904 17.176 3.03904 19.042 4.90704C19.9627 5.82366 20.6924 6.91377 21.189 8.11428C21.6856 9.3148 21.9392 10.6019 21.935 11.901C21.932 17.351 17.498 21.785 12.05 21.785ZM20.463 3.48804C19.3612 2.37896 18.0502 1.49958 16.6061 0.900841C15.162 0.302105 13.6133 -0.00407625 12.05 4.09775e-05C5.49501 4.09775e-05 0.160007 5.33504 0.157007 11.892C0.157007 13.988 0.704007 16.034 1.74501 17.837L0.0570068 24L6.36201 22.346C8.1056 23.296 10.0594 23.7938 12.045 23.794H12.05C18.604 23.794 23.94 18.459 23.943 11.901C23.9478 10.3383 23.6428 8.79014 23.0454 7.34607C22.4481 5.90201 21.5704 4.59071 20.463 3.48804Z" fill="currentColor"/>
-                   </svg>
+                 <button 
+                   onClick={handleWhatsAppClick} 
+                   className={cn(
+                     "w-10 h-10 flex items-center justify-center rounded-xl bg-surface-subtle active:scale-90 border-none",
+                     record.whatsappSent ? "text-yellow-500" : "text-[#25D366]/70"
+                   )}
+                 >
+                   {confirmingWhatsApp ? (
+                     <span className="font-black text-sm leading-none animate-pulse">?</span>
+                   ) : (
+                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="fill-current">
+                       <path d="M17.472 14.382C17.175 14.233 15.714 13.515 15.442 13.415C15.169 13.316 14.971 13.267 14.772 13.565C14.575 13.862 14.005 14.531 13.832 14.729C13.659 14.928 13.485 14.952 13.188 14.804C12.891 14.654 11.933 14.341 10.798 13.329C9.91501 12.541 9.31801 11.568 9.14501 11.27C8.97201 10.973 9.12701 10.812 9.27501 10.664C9.40901 10.531 9.57301 10.317 9.72101 10.144C9.87001 9.97004 9.91901 9.84604 10.019 9.64704C10.118 9.44904 10.069 9.27604 9.99401 9.12704C9.91901 8.97804 9.32501 7.51504 9.07801 6.92004C8.83601 6.34104 8.59101 6.42004 8.40901 6.41004C8.23601 6.40204 8.03801 6.40004 7.83901 6.40004C7.64101 6.40004 7.31901 6.47404 7.04701 6.77204C6.77501 7.06904 6.00701 7.78804 6.00701 9.25104C6.00701 10.713 7.07201 12.126 7.22001 12.325C7.36901 12.523 9.31601 15.525 12.297 16.812C13.006 17.118 13.559 17.301 13.991 17.437C14.703 17.664 15.351 17.632 15.862 17.555C16.433 17.47 17.62 16.836 17.868 16.142C18.116 15.448 18.116 14.853 18.041 14.729C17.967 14.605 17.77 14.531 17.472 14.382ZM12.05 21.785H12.046C10.2758 21.7852 8.53809 21.3092 7.01501 20.407L6.65401 20.193L2.91301 21.175L3.91101 17.527L3.67601 17.153C2.68645 15.5773 2.16295 13.7537 2.16601 11.893C2.16701 6.44304 6.60201 2.00904 12.054 2.00904C14.694 2.00904 17.176 3.03904 19.042 4.90704C19.9627 5.82366 20.6924 6.91377 21.189 8.11428C21.6856 9.3148 21.9392 10.6019 21.935 11.901C21.932 17.351 17.498 21.785 12.05 21.785ZM20.463 3.48804C19.3612 2.37896 18.0502 1.49958 16.6061 0.900841C15.162 0.302105 13.6133 -0.00407625 12.05 4.09775e-05C5.49501 4.09775e-05 0.160007 5.33504 0.157007 11.892C0.157007 13.988 0.704007 16.034 1.74501 17.837L0.0570068 24L6.36201 22.346C8.1056 23.296 10.0594 23.7938 12.045 23.794H12.05C18.604 23.794 23.94 18.459 23.943 11.901C23.9478 10.3383 23.6428 8.79014 23.0454 7.34607C22.4481 5.90201 21.5704 4.59071 20.463 3.48804Z" fill="currentColor"/>
+                     </svg>
+                   )}
                  </button>
                )}
                <button onClick={() => onEdit(record)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-subtle text-text-secondary active:scale-90 border-none">
@@ -470,7 +502,8 @@ export default function AgendaPage() {
           observations: r.observacoes,
           value: r.valor, 
           paymentMethod: r.forma_pagamento,
-          barberId: barberId
+          barberId: barberId,
+          whatsappSent: r.whatsapp_enviado || false
         } as Appointment;
       });
     },
@@ -510,6 +543,7 @@ export default function AgendaPage() {
       if (updates.paymentMethod !== undefined) dbUpdates.forma_pagamento = updates.paymentMethod;
       if (updates.time !== undefined) dbUpdates.horario = updates.time;
       if (updates.date !== undefined) dbUpdates.data = updates.date;
+      if (updates.whatsappSent !== undefined) dbUpdates.whatsapp_enviado = updates.whatsappSent;
  
       const activeBarberId = updates.barberId !== undefined ? updates.barberId : (barberId || selectedBarberId);
       const matchedBarber = barbers.find((b: any) => String(b.id) === String(activeBarberId));
@@ -747,6 +781,12 @@ export default function AgendaPage() {
         setPeriodFilterName("Lembrete Enviado");
         setCopiedSlots([`${record.time.substring(0, 5)} — ${record.client.toUpperCase()}`]);
         setCopied(true);
+        updateMutation.mutate({
+          id: record.id,
+          updates: { whatsappSent: true },
+          dateStr: selectedDateStr,
+          barberId: record.barberId
+        });
       } else {
         setPeriodFilterName("Erro no Lembrete");
         setCopiedSlots(["Falha ao disparar webhook"]);
@@ -919,13 +959,13 @@ export default function AgendaPage() {
     }, 2500);
   }, [slots, currentDate]);
 
-  const openAddModal = useCallback((time: string, date?: string, barberId?: number) => {
+  const openAddModal = useCallback((time: string, date?: string, barberId?: number, clientName?: string) => {
     const lucas = barbers.find((b: any) => b.nome?.toLowerCase() === "lucas");
     const defaultBarberId = barberId || selectedBarberId || (lucas ? lucas.id : (barbers[0]?.id || null));
     setEditingRecord({ 
       time, 
       date: date || selectedDateStr, 
-      client: "", 
+      client: clientName || "", 
       service: "", 
       value: 0, 
       paymentMethod: "PIX", 
@@ -1314,6 +1354,14 @@ export default function AgendaPage() {
           </div>
         </div>
       </Modal>
+
+      <WaitlistPanel
+        dateStr={selectedDateStr}
+        clientSuggestions={clientSuggestions}
+        onAddAppointment={(clientName, timePref) => {
+          openAddModal(timePref || "08:00", selectedDateStr, undefined, clientName);
+        }}
+      />
     </div>
   );
 }

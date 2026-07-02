@@ -202,8 +202,16 @@ export default function PlansPage() {
               <div key={c.id} className="bg-surface-section/20 p-3 lg:p-5 rounded-[1.5rem] lg:rounded-[2rem] transition-all group flex flex-col lg:flex-row items-center gap-4 lg:gap-8 border-none hover:bg-surface-section/40">
                 {/* User Info */}
                 <div className="flex items-center gap-3 lg:gap-5 w-full lg:w-72 shrink-0">
-                   <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-xl lg:rounded-[1.25rem] bg-surface-page flex items-center justify-center text-brand-primary font-black text-base lg:text-lg shadow-2xl">
-                      {c.nome?.charAt(0)}
+                   <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-xl lg:rounded-[1.25rem] bg-surface-page flex items-center justify-center text-brand-primary font-black text-base lg:text-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in">
+                      {c.foto_url ? (
+                        <img 
+                          src={c.foto_url} 
+                          alt={c.nome} 
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        c.nome?.charAt(0)
+                      )}
                    </div>
                    <div className="min-w-0 flex-1 lg:flex-none">
                       <Link href={`/clientes/${c.id}`} className="text-xs lg:text-[13px] font-black text-white hover:text-brand-primary block uppercase tracking-tight truncate transition-colors">
