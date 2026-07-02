@@ -72,6 +72,11 @@ function getNameSimilarity(n1: string, n2: string): number {
   return getJaroWinklerSimilarity(clean1, clean2);
 }
 
+function cleanPhone(phone: string): string {
+  if (!phone) return "";
+  return phone.replace(/\D/g, "");
+}
+
 export default function ClientsPage() {
   const queryClient = useQueryClient();
   const supabase = useSupabase();
@@ -377,65 +382,70 @@ export default function ClientsPage() {
             {filteredClients.map((client) => (
               <div 
                 key={client.id}
-                className="flex flex-col md:grid md:grid-cols-[60px_1.5fr_1.2fr_1.5fr_1fr_1fr_120px] gap-0 px-4 md:px-8 h-12 items-stretch hover:bg-white/[0.01] transition-colors group relative border-none focus-within:z-[500] z-[1]"
+                className="flex flex-col md:grid md:grid-cols-[60px_1.5fr_1.2fr_1.5fr_1fr_1fr_120px] gap-3 md:gap-0 px-4 md:px-8 py-4 md:py-0 md:h-12 items-start md:items-center hover:bg-white/[0.01] transition-colors group relative border-none focus-within:z-[500] z-[1]"
               >
-                {/* Avatar */}
-                <div className="flex items-center px-4">
-                  <Link 
-                    href={`/clientes/${client.id}`}
-                    className="w-10 h-10 rounded-xl bg-surface-page flex items-center justify-center text-brand-primary font-black text-sm shadow-lg hover:scale-110 transition-transform shrink-0"
-                  >
-                    {client.nome?.charAt(0).toUpperCase()}
-                  </Link>
-                </div>
+                {/* Mobile Top Row: Avatar + Name + Plan Badge */}
+                <div className="flex items-center justify-between w-full md:w-auto md:contents gap-3">
+                  <div className="flex items-center gap-3">
+                    {/* Avatar */}
+                    <div className="flex items-center shrink-0 md:px-4">
+                      <Link 
+                        href={`/clientes/${client.id}`}
+                        className="w-10 h-10 rounded-xl bg-surface-page flex items-center justify-center text-brand-primary font-black text-sm shadow-lg hover:scale-110 transition-transform shrink-0"
+                      >
+                        {client.nome?.charAt(0).toUpperCase()}
+                      </Link>
+                    </div>
 
-                {/* Nome */}
-                <div className="h-full flex items-center px-4 relative min-w-0">
-                  <Link 
-                    href={`/clientes/${client.id}`}
-                    className="text-white font-black text-[13px] uppercase tracking-tight hover:text-brand-primary transition-colors truncate block w-full"
-                  >
-                    {client.nome}
-                  </Link>
+                    {/* Nome */}
+                    <div className="flex items-center md:px-4 min-w-0">
+                      <Link 
+                        href={`/clientes/${client.id}`}
+                        className="text-white font-black text-[13px] uppercase tracking-tight hover:text-brand-primary transition-colors truncate block max-w-[180px] md:max-w-none"
+                      >
+                        {client.nome}
+                      </Link>
+                    </div>
+                  </div>
+
+                  {/* Plano */}
+                  <div className="flex items-center md:px-4 shrink-0">
+                    <span className={cn(
+                      "px-2.5 py-0.5 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest",
+                      client.plano !== "Nenhum" ? "bg-brand-primary/10 text-brand-primary" : "bg-white/5 text-white/20"
+                    )}>
+                      {client.plano || "Nenhum"}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Telefone */}
                 <div 
-                  className="h-full flex items-center px-4 transition-all focus-within:ring-2 focus-within:ring-inset focus-within:ring-brand-primary relative min-w-0"
+                  className="flex items-center md:px-4 transition-all focus-within:ring-2 focus-within:ring-inset focus-within:ring-brand-primary relative min-w-0 w-full md:w-auto"
                   onClick={(e) => {
                     e.stopPropagation();
                   }}
                 >
                   <InlineInput 
                     value={client.telefone || ""}
-                    placeholder="Adicionar..."
-                    onSave={(val) => saveMutation.mutate({ data: { id: client.id, telefone: val } })}
-                    className="text-white font-bold w-full h-full flex items-center text-xs"
+                    placeholder="Adicionar telefone..."
+                    onSave={(val) => saveMutation.mutate({ data: { id: client.id, telefone: cleanPhone(val) } })}
+                    className="text-white/60 md:text-white font-bold w-full flex items-center text-xs"
                   />
                 </div>
 
                 {/* Observações */}
-                <div className="h-full flex items-center px-4 text-[10px] md:text-[11px] font-medium text-text-muted truncate italic">
+                <div className="hidden md:flex items-center md:px-4 text-[10px] md:text-[11px] font-medium text-text-muted truncate italic">
                   {client.observacoes_cliente || <span className="text-white/10">—</span>}
                 </div>
 
-                {/* Plano */}
-                <div className="h-full flex items-center px-4">
-                  <span className={cn(
-                    "px-2 md:px-3 py-0.5 md:py-1 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest",
-                    client.plano !== "Nenhum" ? "bg-brand-primary/10 text-brand-primary" : "bg-white/5 text-white/20"
-                  )}>
-                    {client.plano || "Nenhum"}
-                  </span>
-                </div>
-
                 {/* Desde */}
-                <div className="h-full flex items-center px-4 text-[11px] font-black text-text-muted uppercase tracking-widest">
+                <div className="hidden md:flex items-center md:px-4 text-[11px] font-black text-text-muted uppercase tracking-widest">
                   {client.created_at ? new Date(client.created_at).getFullYear() : "--"}
                 </div>
 
                 {/* Ações */}
-                <div className="h-full flex items-center justify-end px-4 gap-2">
+                <div className="flex items-center justify-end md:px-4 gap-2 w-full md:w-auto mt-1 md:mt-0 pt-2 md:pt-0 border-t border-white/5 md:border-none">
                   <button 
                     onClick={(e) => {
                       e.preventDefault();
@@ -473,7 +483,7 @@ export default function ClientsPage() {
           const formData = new FormData(e.currentTarget);
           const data: any = {
             nome: String(formData.get("nome")),
-            telefone: String(formData.get("telefone")),
+            telefone: cleanPhone(String(formData.get("telefone"))),
             plano: String(formData.get("plano")),
             valor_plano: parseFloat(String(formData.get("valor_plano"))) || 0,
             limite_cortes: parseInt(String(formData.get("limite_cortes"))) || 0,

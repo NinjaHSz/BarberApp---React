@@ -269,6 +269,11 @@ export default function ClientProfilePage() {
     return dates;
   };
 
+  const cleanPhone = (phone: string): string => {
+    if (!phone) return "";
+    return phone.replace(/\D/g, "");
+  };
+
   const formatTimeHHMM = (timeStr: string): string => {
     if (!timeStr) return "14:00";
     const clean = timeStr.trim();
@@ -386,7 +391,7 @@ export default function ClientProfilePage() {
             <span className="text-[9px] font-black text-text-muted uppercase tracking-wider">Telefone:</span>
             <InlineInput
               value={client.telefone || "Adicionar telefone..."}
-              onSave={(v) => updateMutation.mutate({ telefone: v })}
+              onSave={(v) => updateMutation.mutate({ telefone: cleanPhone(v) })}
               className="p-0 text-white font-bold h-auto w-auto inline-block focus:bg-white/5"
             />
           </div>

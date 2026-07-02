@@ -252,7 +252,7 @@ const RecordRow = memo(function RecordRowComponent({
             }}
             className={cn(
               "text-sm uppercase font-medium w-full h-full flex items-center",
-              isBreak ? "text-text-muted italic" : isEmpty ? "text-text-muted/40" : record.service === "A DEFINIR" ? "text-rose-500 font-black animate-pulse" : "text-text-primary"
+              isBreak ? "text-text-muted italic" : isEmpty ? "text-text-muted/40" : record.service === "A DEFINIR" ? "text-rose-500 font-black" : "text-text-primary"
             )}
           />
         </div>
@@ -473,7 +473,8 @@ export default function AgendaPage() {
           barberId: barberId
         } as Appointment;
       });
-    }
+    },
+    staleTime: 1000 * 60 * 2,
   });
 
   const filteredRecords = useMemo(() => {
@@ -582,6 +583,8 @@ export default function AgendaPage() {
   useEffect(() => {
     recordsRef.current = filteredRecords;
   }, [filteredRecords]);
+
+
 
   const handleUndo = async () => {
     if (!lastAction) return;
@@ -836,6 +839,31 @@ export default function AgendaPage() {
   }, [filteredRecords, deferredSearchTerm, showEmptySlots, selectedDateStr, selectedBarberId]);
 
   const handleDayChange = useCallback((delta: number) => setCurrentDate(prev => delta > 0 ? addDays(prev, delta) : subDays(prev, Math.abs(delta))), []);
+
+  // Arrow keys day-by-day navigation
+  useEffect(() => {
+    const handleArrowKeys = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (
+        activeEl &&
+        (activeEl.tagName === "INPUT" ||
+          activeEl.tagName === "TEXTAREA" ||
+          activeEl.tagName === "SELECT" ||
+          activeEl.hasAttribute("contenteditable"))
+      ) {
+        return;
+      }
+
+      if (e.key === "ArrowLeft") {
+        handleDayChange(-1);
+      } else if (e.key === "ArrowRight") {
+        handleDayChange(1);
+      }
+    };
+
+    window.addEventListener("keydown", handleArrowKeys);
+    return () => window.removeEventListener("keydown", handleArrowKeys);
+  }, [handleDayChange]);
   const handleDaySelect = useCallback((day: number) => { setCurrentDate(prev => { const d = new Date(prev); d.setDate(day); return d; }); }, []);
   const handleMonthSelect = useCallback((month: number) => { setCurrentDate(prev => { const d = new Date(prev); d.setMonth(month - 1); return d; }); }, []);
   const handleYearSelect = useCallback((year: number) => { setCurrentDate(prev => { const d = new Date(prev); d.setFullYear(year); return d; }); }, []);

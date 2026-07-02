@@ -28,6 +28,7 @@ export function useClients() {
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60 * 5,
   });
 }
 
@@ -42,6 +43,7 @@ export function useProcedures() {
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60 * 5,
   });
 }
 
@@ -71,6 +73,7 @@ export function useBarbers() {
       if (error) throw error;
       return data;
     },
+    staleTime: 1000 * 60 * 5,
   });
 }
 
@@ -164,6 +167,7 @@ export function useAppointments() {
         };
       });
     },
+    staleTime: 1000 * 60 * 2,
   });
 }
 
