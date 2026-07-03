@@ -31,10 +31,6 @@ export function WaitlistPanel({
   const queryClient = useQueryClient();
   const dragControls = useDragControls();
 
-  if (!mounted) {
-    return null;
-  }
-
   // Fetch items from Supabase
   const { data: items = [], isLoading } = useWaitlist(dateStr);
 
@@ -74,6 +70,10 @@ export function WaitlistPanel({
       queryClient.invalidateQueries({ queryKey: ["waitlist", dateStr] });
     },
   });
+
+  if (!mounted) {
+    return null;
+  }
 
   const handleAdd = () => {
     addMutation.mutate();
