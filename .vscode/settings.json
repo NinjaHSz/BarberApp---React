@@ -1,6 +1,1 @@
-{
-  "files.exclude": {
-    "**/.agent": true,
-    "**/.superpowers": true
-  }
-}
+{}
