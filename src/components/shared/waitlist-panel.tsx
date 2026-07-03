@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { motion, useDragControls, AnimatePresence } from "framer-motion";
-import { GripHorizontal, Minimize2, Maximize2, Plus, Trash2, Calendar, Clock, List } from "lucide-react";
+import { motion, useDragControls } from "framer-motion";
+import { GripHorizontal, ChevronDown, ChevronUp, Plus, Trash2, Calendar, List } from "lucide-react";
 import { AutocompleteInput, type Suggestion } from "./autocomplete-input";
 import { useWaitlist, useSupabase } from "@/hooks/use-data";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -19,10 +19,8 @@ export function WaitlistPanel({
   onAddAppointment,
 }: WaitlistPanelProps) {
   const [isMinimized, setIsMinimized] = useState(true);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [clientInput, setClientInput] = useState("");
-  const [noPreference, setNoPreference] = useState(true);
-  const [startTime, setStartTime] = useState("09:00");
-  const [endTime, setEndTime] = useState("18:00");
 
   const supabase = useSupabase();
   const queryClient = useQueryClient();
@@ -41,9 +39,9 @@ export function WaitlistPanel({
           {
             data: dateStr,
             cliente_nome: clientInput.trim(),
-            sem_preferencia: noPreference,
-            hora_inicio: noPreference ? null : startTime,
-            hora_fim: noPreference ? null : endTime,
+            sem_preferencia: true,
+            hora_inicio: null,
+            hora_fim: null,
           },
         ]);
       if (error) throw error;
@@ -69,10 +67,6 @@ export function WaitlistPanel({
   });
 
   const handleAdd = () => {
-    handleAddAction();
-  };
-
-  const handleAddAction = () => {
     addMutation.mutate();
   };
 
@@ -80,12 +74,10 @@ export function WaitlistPanel({
     deleteMutation.mutate(id);
   };
 
-  const displayedItems = isMinimized ? items.slice(0, 2) : items;
-
-  if (isMinimized) {
-    return (
-      <div className="fixed bottom-24 md:bottom-4 right-2 md:right-4 z-[999] pointer-events-none flex flex-col items-end">
-        {/* Mobile Circle Button */}
+  return (
+    <div className="fixed bottom-24 md:bottom-4 right-2 md:right-4 z-[999] pointer-events-none flex flex-col items-end">
+      {/* Mobile Circle Toggle Button */}
+      {isMinimized && (
         <motion.button
           layout
           onClick={() => setIsMinimized(false)}
@@ -98,265 +90,124 @@ export function WaitlistPanel({
             </span>
           )}
         </motion.button>
+      )}
 
-        {/* Desktop Minimized Panel */}
+      {/* Main Panel */}
+      {(!isMinimized || (typeof window !== "undefined" && window.innerWidth >= 768)) && (
         <motion.div
           layout
           drag
           dragListener={false}
           dragControls={dragControls}
           dragMomentum={false}
-          className="hidden md:flex pointer-events-auto bg-surface-section/95 backdrop-blur-2xl rounded-[2rem] shadow-[0_30px_60px_rgba(0,0,0,0.8)] flex-col w-[300px] max-w-[90vw]"
+          className={`${
+            isMinimized ? "flex md:flex" : "flex"
+          } pointer-events-auto bg-surface-section/95 backdrop-blur-2xl rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex-col w-[260px] max-w-[90vw] overflow-hidden`}
         >
-          {/* Header/Drag Handle */}
+          {/* Top Grab Handle */}
           <div 
             onPointerDown={(e) => dragControls.start(e)}
-            className="flex items-center justify-between px-5 py-3.5 bg-white/[0.02] cursor-grab active:cursor-grabbing select-none shrink-0 rounded-t-[2rem]"
+            className="w-full pt-2 pb-1 cursor-grab active:cursor-grabbing flex justify-center shrink-0 hover:bg-white/[0.01] transition-colors"
           >
-            <div className="flex items-center gap-2">
-              <GripHorizontal size={14} className="text-text-muted hover:text-white transition-colors" />
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-text-secondary leading-none">
-                  Lista de Espera
-                </span>
-                {!isLoading && items.length > 0 && (
-                  <span className="text-[8px] font-black text-brand-primary uppercase tracking-wider leading-none">
-                    {items.length} {items.length === 1 ? "cliente" : "clientes"}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <button
-              onClick={() => setIsMinimized(!isMinimized)}
-              className="p-1.5 rounded-xl hover:bg-white/5 text-text-muted hover:text-white transition-all border-none cursor-pointer"
-            >
-              <Maximize2 size={12} />
-            </button>
+            <div className="w-10 h-1 bg-white/10 rounded-full" />
           </div>
 
-          {/* List Section (rendered if items exist) */}
-          {items.length > 0 && (
-            <div className="px-5 pb-5 pt-2 flex flex-col gap-2 shrink-0">
-              <div className="flex flex-col gap-1.5 max-h-[220px] overflow-y-auto custom-scroll pr-0.5">
-                {displayedItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between p-2.5 bg-white/[0.02] rounded-xl hover:bg-white/[0.04] transition-colors"
-                  >
-                    <div className="flex flex-col min-w-0 pr-2">
-                      <span className="text-[11px] font-black text-white uppercase truncate">
-                        {item.cliente_nome}
-                      </span>
-                      <span className="text-[8px] font-bold text-text-muted flex items-center gap-1">
-                        <Clock size={8} />
-                        {item.sem_preferencia
-                          ? "Qualquer horário"
-                          : `${item.hora_inicio?.substring(0, 5)} - ${item.hora_fim?.substring(0, 5)}`}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => onAddAppointment(item.cliente_nome, item.hora_inicio || undefined)}
-                        className="p-1.5 rounded-lg bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary hover:text-white transition-all border-none cursor-pointer"
-                        title="Agendar"
-                      >
-                        <Calendar size={10} />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(item.id)}
-                        disabled={deleteMutation.isPending}
-                        className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 hover:text-rose-400 transition-all border-none cursor-pointer"
-                        title="Remover"
-                      >
-                        <Trash2 size={10} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-
-                {items.length > 2 && (
-                  <span className="text-[8px] font-black text-brand-primary uppercase tracking-widest text-center mt-1">
-                    + {items.length - 2} outro(s) na fila
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-        </motion.div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="fixed bottom-24 md:bottom-4 right-2 md:right-4 z-[999] pointer-events-none">
-      <motion.div
-        layout
-        drag
-        dragListener={false}
-        dragControls={dragControls}
-        dragMomentum={false}
-        className="pointer-events-auto bg-surface-section/95 backdrop-blur-2xl rounded-[2rem] shadow-[0_30px_60px_rgba(0,0,0,0.8)] flex flex-col w-[300px] max-w-[90vw]"
-      >
-        {/* Header/Drag Handle */}
-        <div 
-          onPointerDown={(e) => dragControls.start(e)}
-          className="flex items-center justify-between px-5 py-3.5 bg-white/[0.02] cursor-grab active:cursor-grabbing select-none shrink-0 rounded-t-[2rem]"
-        >
-          <div className="flex items-center gap-2">
-            <GripHorizontal size={14} className="text-text-muted hover:text-white transition-colors" />
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-text-secondary leading-none">
-                Lista de Espera
-              </span>
-              {!isLoading && items.length > 0 && (
-                <span className="text-[8px] font-black text-brand-primary uppercase tracking-wider leading-none">
-                  {items.length} {items.length === 1 ? "cliente" : "clientes"}
-                </span>
-              )}
-            </div>
-          </div>
-
-          <button
-            onClick={() => setIsMinimized(!isMinimized)}
-            className="p-1.5 rounded-xl hover:bg-white/5 text-text-muted hover:text-white transition-all border-none cursor-pointer"
-          >
-            <Minimize2 size={12} />
-          </button>
-        </div>
-
-        {/* Compact Form */}
-        <AnimatePresence>
-          <motion.form
+          {/* Form Header (Input + Plus + Collapse Button) */}
+          <form
             onSubmit={(e) => {
               e.preventDefault();
               handleAdd();
             }}
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="px-5 pt-2 pb-1 flex flex-col gap-2 shrink-0"
+            className="px-3 pb-2.5 flex gap-1.5 items-center shrink-0"
           >
-            <div className="flex gap-2 items-center">
-              <div className="flex-1 min-w-0">
-                <AutocompleteInput
-                  value={clientInput}
-                  onChange={setClientInput}
-                  onSelect={(item) => setClientInput(item.label)}
-                  suggestions={clientSuggestions}
-                  placeholder="Nome do cliente..."
-                  className="z-[1050]"
-                  inputClassName="w-full bg-surface-page/50 border-none rounded-xl px-3 py-1.5 text-xs text-text-primary focus:ring-1 focus:ring-brand-primary placeholder:text-text-muted/60"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={!clientInput.trim() || addMutation.isPending}
-                className="w-8 h-8 bg-brand-primary disabled:opacity-40 text-surface-page rounded-xl flex items-center justify-center hover:scale-[1.05] active:scale-95 transition-all border-none cursor-pointer shrink-0 animate-in fade-in"
-                title="Adicionar"
-              >
-                <Plus size={14} strokeWidth={3} />
-              </button>
+            <div className="flex-1 min-w-0">
+              <AutocompleteInput
+                value={clientInput}
+                onChange={setClientInput}
+                onSelect={(item) => setClientInput(item.label)}
+                suggestions={clientSuggestions}
+                placeholder="Aguardando..."
+                className="z-[1050]"
+                inputClassName="w-full bg-surface-page/50 border-none rounded-xl px-2.5 py-1.5 text-[11px] text-text-primary focus:ring-1 focus:ring-brand-primary placeholder:text-text-muted/60"
+              />
             </div>
+            
+            <button
+              type="submit"
+              disabled={!clientInput.trim() || addMutation.isPending}
+              className="w-7 h-7 bg-brand-primary disabled:opacity-40 text-surface-page rounded-xl flex items-center justify-center hover:scale-[1.05] active:scale-95 transition-all border-none cursor-pointer shrink-0"
+              title="Adicionar à espera"
+            >
+              <Plus size={12} strokeWidth={3} />
+            </button>
 
-            <div className="flex items-center justify-between text-[8px] font-black text-text-secondary uppercase tracking-widest px-1">
-              <span>Sem preferência de horário</span>
-              <button
-                type="button"
-                onClick={() => setNoPreference(!noPreference)}
-                className={`w-8 h-4 rounded-full p-0.5 transition-colors border-none cursor-pointer flex ${
-                  noPreference ? "bg-brand-primary justify-end" : "bg-surface-page/80 justify-start"
-                }`}
-              >
-                <motion.div 
-                  layout 
-                  className={`w-3 h-3 rounded-full shadow-md ${noPreference ? "bg-surface-page" : "bg-text-muted"}`} 
-                />
-              </button>
-            </div>
+            {/* Collapse toggle (Desktop only) */}
+            <button
+              type="button"
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className="hidden md:flex w-7 h-7 rounded-xl hover:bg-white/5 text-text-muted hover:text-white items-center justify-center transition-all border-none cursor-pointer shrink-0"
+              title={isCollapsed ? "Expandir lista" : "Colapsar lista"}
+            >
+              {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+            </button>
 
-            {!noPreference && (
-              <div className="flex items-center justify-between gap-2 px-1 py-1 animate-in fade-in slide-in-from-top-2 duration-300 shrink-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[8px] font-black text-text-muted uppercase">De</span>
-                  <input
-                    type="time"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    className="bg-surface-page/50 border-none rounded-lg px-2 py-1 text-[11px] font-bold text-white outline-none focus:ring-1 focus:ring-brand-primary"
-                  />
+            {/* Close button (Mobile only) */}
+            <button
+              type="button"
+              onClick={() => setIsMinimized(true)}
+              className="md:hidden w-7 h-7 rounded-xl hover:bg-white/5 text-text-muted hover:text-white flex items-center justify-center transition-all border-none cursor-pointer shrink-0"
+            >
+              <ChevronDown size={14} />
+            </button>
+          </form>
+
+          {/* List Section */}
+          {!isCollapsed && (
+            <div className="px-3 pb-3 pt-1 flex flex-col gap-1.5 shrink-0">
+              {isLoading ? (
+                <div className="py-2 text-center text-[9px] font-black uppercase tracking-widest text-text-muted/40 italic animate-pulse">
+                  Carregando fila...
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[8px] font-black text-text-muted uppercase">Até</span>
-                  <input
-                    type="time"
-                    value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
-                    className="bg-surface-page/50 border-none rounded-lg px-2 py-1 text-[11px] font-bold text-white outline-none focus:ring-1 focus:ring-brand-primary"
-                  />
+              ) : items.length === 0 ? (
+                <div className="py-2 text-center text-[9px] font-black uppercase tracking-widest text-text-muted/40 italic">
+                  Fila vazia
                 </div>
-              </div>
-            )}
-          </motion.form>
-        </AnimatePresence>
-
-        {/* List Section */}
-        <div className="px-5 pb-5 pt-2 flex flex-col gap-2 shrink-0">
-          <span className="text-[8px] font-black text-text-muted uppercase tracking-[0.15em] px-1">
-            Fila de Espera
-          </span>
-
-          {isLoading ? (
-            <div className="py-4 text-center text-[9px] font-black uppercase tracking-widest text-text-muted/40 italic animate-pulse">
-              Carregando fila...
-            </div>
-          ) : items.length === 0 ? (
-            <div className="py-4 text-center text-[9px] font-black uppercase tracking-widest text-text-muted/40 italic">
-              Nenhum cliente aguardando
-            </div>
-          ) : (
-            <div className="flex flex-col gap-1.5 max-h-[220px] overflow-y-auto custom-scroll pr-0.5">
-              {items.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between p-2.5 bg-white/[0.02] rounded-xl hover:bg-white/[0.04] transition-colors"
-                >
-                  <div className="flex flex-col min-w-0 pr-2">
-                    <span className="text-[11px] font-black text-white uppercase truncate">
-                      {item.cliente_nome}
-                    </span>
-                    <span className="text-[8px] font-bold text-text-muted flex items-center gap-1">
-                      <Clock size={8} />
-                      {item.sem_preferencia
-                        ? "Qualquer horário"
-                        : `${item.hora_inicio?.substring(0, 5)} - ${item.hora_fim?.substring(0, 5)}`}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      onClick={() => onAddAppointment(item.cliente_nome, item.hora_inicio || undefined)}
-                      className="p-1.5 rounded-lg bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary hover:text-white transition-all border-none cursor-pointer"
-                      title="Agendar"
+              ) : (
+                <div className="flex flex-col gap-1 max-h-[180px] overflow-y-auto custom-scroll pr-0.5">
+                  {items.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between p-1.5 bg-white/[0.02] rounded-lg hover:bg-white/[0.04] transition-colors gap-2"
                     >
-                      <Calendar size={10} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(item.id)}
-                      disabled={deleteMutation.isPending}
-                      className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 hover:text-rose-400 transition-all border-none cursor-pointer"
-                      title="Remover"
-                    >
-                      <Trash2 size={10} />
-                    </button>
-                  </div>
+                      <span className="text-[10px] font-black text-white uppercase truncate flex-1 leading-none">
+                        {item.cliente_nome}
+                      </span>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => onAddAppointment(item.cliente_nome)}
+                          className="p-1 rounded-md bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary hover:text-white transition-all border-none cursor-pointer"
+                          title="Agendar cliente"
+                        >
+                          <Calendar size={10} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(item.id)}
+                          disabled={deleteMutation.isPending}
+                          className="p-1 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 hover:text-rose-400 transition-all border-none cursor-pointer"
+                          title="Remover"
+                        >
+                          <Trash2 size={10} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           )}
-        </div>
-      </motion.div>
+        </motion.div>
+      )}
     </div>
   );
 }
