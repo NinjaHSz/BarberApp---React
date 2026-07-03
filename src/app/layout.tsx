@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/lib/providers";
-import { Sidebar } from "@/components/layout/sidebar";
+import { DesktopDock } from "@/components/layout/desktop-dock";
+import { DesktopSyncButton } from "@/components/layout/desktop-sync-button";
 import { MobileDock } from "@/components/layout/mobile-dock";
 import { MobileSyncButton } from "@/components/layout/mobile-sync-button";
 import { KeyboardNavigation } from "@/components/layout/keyboard-navigation";
@@ -59,12 +60,13 @@ export default function RootLayout({
             duration={400}
           >
             <div className="flex h-full w-full overflow-hidden">
-              <Sidebar />
-              <main className="flex-1 h-full overflow-auto custom-scroll relative">
+              <DesktopDock />
+              <main className="flex-1 h-full overflow-auto custom-scroll relative pb-28 md:pb-32">
                 {children}
               </main>
               <MobileDock />
               <MobileSyncButton />
+              <DesktopSyncButton />
             </div>
           </ClickSpark>
         </Providers>
