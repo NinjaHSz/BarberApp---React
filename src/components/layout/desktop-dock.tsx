@@ -157,9 +157,8 @@ export function DesktopDock() {
             const isActive = pathname === item.href;
             const Icon = item.icon;
             return (
-              <Link key={item.href} href={item.href} passHref legacyBehavior>
+              <Link key={item.href} href={item.href} className="contents">
                 <DockItem
-                  onClick={() => {}}
                   mouseX={mouseX}
                   spring={spring}
                   distance={distance}
