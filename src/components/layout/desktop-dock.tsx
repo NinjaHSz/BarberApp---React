@@ -78,7 +78,7 @@ function DockItem({
       aria-haspopup="true"
       aria-label={label}
     >
-      {Children.map(children, child => cloneElement(child as React.ReactElement, { isHovered }))}
+      {Children.map(children, child => cloneElement(child as React.ReactElement<any>, { isHovered }))}
     </motion.div>
   );
 }
