@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, useDragControls } from "framer-motion";
 import { GripHorizontal, ChevronDown, ChevronUp, Plus, Trash2, Calendar, List } from "lucide-react";
 import { AutocompleteInput, type Suggestion } from "./autocomplete-input";
@@ -21,10 +21,19 @@ export function WaitlistPanel({
   const [isMinimized, setIsMinimized] = useState(true);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [clientInput, setClientInput] = useState("");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const supabase = useSupabase();
   const queryClient = useQueryClient();
   const dragControls = useDragControls();
+
+  if (!mounted) {
+    return null;
+  }
 
   // Fetch items from Supabase
   const { data: items = [], isLoading } = useWaitlist(dateStr);
