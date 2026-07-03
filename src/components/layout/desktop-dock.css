@@ -1,0 +1,72 @@
+.dock-outer {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99;
+}
+
+.dock-panel {
+  display: flex;
+  align-items: flex-end;
+  width: fit-content;
+  gap: 0.75rem;
+  border-radius: 1.5rem;
+  background-color: var(--surface-card);
+  backdrop-filter: blur(16px);
+  padding: 0.5rem 0.75rem;
+  box-sizing: border-box;
+  box-shadow: var(--shadow-card);
+}
+
+.dock-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1rem;
+  background-color: var(--surface-subtle);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  outline: none;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+  color: var(--text-secondary);
+}
+
+.dock-item:hover,
+.dock-item:focus-visible {
+  background-color: var(--brand-primary);
+  color: var(--surface-page);
+}
+
+.dock-item.active {
+  background-color: var(--brand-primary);
+  color: var(--surface-page);
+}
+
+.dock-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dock-label {
+  position: absolute;
+  top: -2.2rem;
+  left: 50%;
+  width: fit-content;
+  white-space: pre;
+  border-radius: 0.5rem;
+  background-color: var(--surface-section);
+  padding: 0.25rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  color: var(--text-primary);
+  box-shadow: var(--shadow-card);
+  transform: translateX(-50%);
+}
