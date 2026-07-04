@@ -36,7 +36,7 @@ export default function PlansPage() {
     return result.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
   }, [clientsWithPlans, searchTerm]);
 
-  // Usos reais por cliente: query no banco filtrando desde plano_pagamento
+  // Usos reais por cliente: query no banco filtrando desde o último agendamento de renovação
   useEffect(() => {
     if (!clientsWithPlans.length) return;
     const fetchUsage = async () => {
@@ -45,7 +45,7 @@ export default function PlansPage() {
         clientsWithPlans.map(async (c) => {
           const clientName = c.nome || "";
           
-          // 1. Find the latest "RENOVAÇÃO" appointment date for this client
+          // Find the latest "RENOVAÇÃO" appointment date for this client
           const { data: latestRenov } = await supabase
             .from("agendamentos")
             .select("data")
@@ -54,50 +54,35 @@ export default function PlansPage() {
             .order("data", { ascending: false })
             .limit(1);
 
-          const dbRenovDate = latestRenov?.[0]?.data;
-          const manualResetDate = c.plano_pagamento;
-
-          // The cycle starts at the LATEST of the last physical renovation or the manual reset date
-          let startDate = dbRenovDate;
-          if (!startDate || (manualResetDate && manualResetDate > startDate)) {
-            startDate = manualResetDate;
-          }
-
+          const startDate = latestRenov?.[0]?.data;
           const todayStr = format(new Date(), "yyyy-MM-dd");
 
-          // 2. Count UNIQUE DAYS of usage from that date forward (up to TODAY)
+          // Count usage from that date forward
           let query = supabase
             .from("agendamentos")
-            .select("data")
+            .select("data, procedimento")
             .ilike("cliente", clientName)
-            .neq("cliente", "PAUSA")
-            .lte("data", todayStr);
+            .neq("cliente", "PAUSA");
 
           if (startDate) {
             query = query.gte("data", startDate);
           }
 
           const { data: usageData } = await query;
-          const uniqueDays = new Set(usageData?.map(u => u.data)).size;
-          map[c.id] = uniqueDays;
+          
+          const filteredUsage = (usageData || []).filter(u => {
+            const proc = (u.procedimento || "").toUpperCase().trim();
+            if (proc === "RENOVAÇÃO 1º DIA") return true;
+            return /^(\d+)º\s*DIA$/.test(proc);
+          });
+
+          map[c.id] = filteredUsage.length;
         })
       );
       setUsageByClient(map);
     };
     fetchUsage();
   }, [clientsWithPlans, supabase]);
-
-
-  const stats = useMemo(() => {
-    const active = clientsWithPlans.filter(c => c.plano !== "Pausado").length;
-    const pending = clientsWithPlans.filter(c => {
-      if (!c.plano_pagamento) return true;
-      const diff = differenceInDays(new Date(), parseISO(c.plano_pagamento));
-      return diff > 30;
-    }).length;
-    const mrr = clientsWithPlans.reduce((acc, c) => acc + (c.valor_plano || 0), 0);
-    return { active, pending, mrr };
-  }, [clientsWithPlans]);
 
   // Mutations
   const updateMutation = useMutation({
@@ -126,14 +111,7 @@ export default function PlansPage() {
     },
   });
 
-  const handleResetCycle = (client: any) => {
-    if (confirm(`Reiniciar ciclo de ${client.nome} hoje?`)) {
-      updateMutation.mutate({
-        id: client.id,
-        data: { plano_pagamento: new Date().toISOString().split("T")[0] }
-      });
-    }
-  };
+
 
   const handleToggleStatus = (client: any) => {
     const newStatus = client.plano === "Pausado" ? "Mensal" : "Pausado";
@@ -197,7 +175,6 @@ export default function PlansPage() {
           <div className="py-20 text-center text-text-muted italic text-[10px] uppercase font-bold tracking-widest opacity-20">Nenhum assinante encontrado</div>
         ) : (
           filteredPlans.map((c) => {
-            const isPending = c.plano_pagamento && differenceInDays(new Date(), parseISO(c.plano_pagamento)) > 30;
             return (
               <div key={c.id} className="bg-surface-section/20 p-3 lg:p-5 rounded-[1.5rem] lg:rounded-[2rem] transition-all group flex flex-col lg:flex-row items-center gap-4 lg:gap-8 border-none hover:bg-surface-section/40">
                 {/* User Info */}
@@ -253,20 +230,7 @@ export default function PlansPage() {
                     </div>
                   </div>
 
-                  {/* Ciclo / Pagamento - Desktop Only */}
-                  <div className="hidden lg:flex flex-col w-full lg:w-40 shrink-0">
-                    <p className="text-[7px] lg:text-[8px] font-black text-text-muted uppercase tracking-widest mb-0.5 lg:mb-1.5">Renovação</p>
-                    <input 
-                      type="date"
-                      value={c.plano_pagamento || ""}
-                      onChange={(e) => updateMutation.mutate({ id: c.id, data: { plano_pagamento: e.target.value } })}
-                      className={cn(
-                        "bg-transparent border-none text-[10px] lg:text-[11px] font-black p-0 outline-none cursor-pointer uppercase",
-                        isPending ? "text-rose-500" : "text-white"
-                      )}
-                      style={{ colorScheme: "dark" }}
-                    />
-                  </div>
+
 
                   {/* Valor - Desktop Only */}
                   <div className="hidden lg:flex flex-col w-full lg:w-28 shrink-0">
@@ -294,7 +258,6 @@ export default function PlansPage() {
 
                 {/* Ações - Desktop */}
                 <div className="hidden lg:flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-all">
-                   <button onClick={() => handleResetCycle(c)} className="p-3 rounded-2xl bg-white/5 text-text-muted hover:text-brand-primary hover:bg-brand-primary/10 transition-all border-none" title="Reset Ciclo"><RotateCcw size={14} /></button>
                    <button onClick={() => handleToggleStatus(c)} className="p-3 rounded-2xl bg-white/5 text-text-muted hover:text-white transition-all border-none" title={c.plano === "Pausado" ? "Ativar" : "Pausar"}>
                      {c.plano === "Pausado" ? <Play size={14} fill="currentColor" /> : <Pause size={14} fill="currentColor" />}
                    </button>

@@ -8,7 +8,8 @@ import { useState, useMemo, useEffect } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { useAgenda } from "@/lib/contexts/agenda-context";
 import { InlineInput } from "@/components/shared/inline-input";
 import { InlineAutocomplete } from "@/components/shared/inline-autocomplete";
 import { PaymentSelector } from "@/components/shared/payment-selector";
@@ -18,6 +19,8 @@ import { DayPicker } from "react-day-picker";
 
 export default function ClientProfilePage() {
   const { id } = useParams();
+  const router = useRouter();
+  const { setSelectedDate } = useAgenda();
   const queryClient = useQueryClient();
   const supabase = useSupabase();
   const { data: clients = [], isLoading: loadingClients } = useClients();
@@ -49,12 +52,109 @@ export default function ClientProfilePage() {
   const [activeDatePickerIdx, setActiveDatePickerIdx] = useState<number | null>(null);
   const [intervalDays, setIntervalDays] = useState<number>(7);
   const [batchCount, setBatchCount] = useState<number>(4);
+  const [procedureNaming, setProcedureNaming] = useState<"preset" | "x-dia">("x-dia");
   
   // Pending Name Migration State
   const [isNameModalOpen, setIsNameModalOpen] = useState(false);
   const [pendingName, setPendingName] = useState("");
 
+  // Delete Confirmation State
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
+  // Custom alerts/confirms states
+  const [alertConfig, setAlertConfig] = useState<{ isOpen: boolean; title: string; message: string }>({
+    isOpen: false,
+    title: "",
+    message: ""
+  });
+  const [isRemovePresetModalOpen, setIsRemovePresetModalOpen] = useState(false);
+
+  const triggerAlert = (title: string, message: string) => {
+    setAlertConfig({ isOpen: true, title, message });
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent, apptId: string, barberId: string | number | null) => {
+    e.stopPropagation();
+    if (confirmingDeleteId !== apptId) {
+      setConfirmingDeleteId(apptId);
+      setTimeout(() => {
+        setConfirmingDeleteId(prev => prev === apptId ? null : prev);
+      }, 4000);
+    } else {
+      deleteAppointmentMutation.mutate({ apptId, barberId });
+      setConfirmingDeleteId(null);
+    }
+  };
+
+  const handleSuggestPresets = () => {
+    if (clientAppointments.length === 0) {
+      triggerAlert("Preset", "Nenhum agendamento anterior encontrado para este cliente.");
+      return;
+    }
+    const recentAppts = clientAppointments.slice(0, 10);
+    
+    const paymentCounts: { [key: string]: number } = {};
+    const barberCounts: { [key: string]: number } = {};
+    const timeCounts: { [key: string]: number } = {};
+    const dayOfWeekCounts: { [key: string]: number } = {};
+    
+    const weekdaysPT = [
+      "Domingo",
+      "Segunda-feira",
+      "Terça-feira",
+      "Quarta-feira",
+      "Quinta-feira",
+      "Sexta-feira",
+      "Sábado"
+    ];
+
+    recentAppts.forEach(appt => {
+      if (appt.paymentMethod) paymentCounts[appt.paymentMethod] = (paymentCounts[appt.paymentMethod] || 0) + 1;
+      if (appt.barberId !== undefined && appt.barberId !== null) {
+        barberCounts[appt.barberId] = (barberCounts[appt.barberId] || 0) + 1;
+      }
+      if (appt.time) {
+        const cleanTime = appt.time.substring(0, 5);
+        timeCounts[cleanTime] = (timeCounts[cleanTime] || 0) + 1;
+      }
+      if (appt.date) {
+        try {
+          const d = parseISO(appt.date);
+          const dayName = weekdaysPT[d.getDay()];
+          dayOfWeekCounts[dayName] = (dayOfWeekCounts[dayName] || 0) + 1;
+        } catch (e) {}
+      }
+    });
+
+    const getMostFrequent = (counts: { [key: string]: number }) => {
+      let max = 0;
+      let result = "";
+      Object.entries(counts).forEach(([k, v]) => {
+        if (v > max) {
+          max = v;
+          result = k;
+        }
+      });
+      return result;
+    };
+
+    const suggestedPayment = getMostFrequent(paymentCounts);
+    const suggestedBarberId = getMostFrequent(barberCounts);
+    const suggestedTime = getMostFrequent(timeCounts);
+    const suggestedDay = getMostFrequent(dayOfWeekCounts);
+
+    const newPreset = {
+      service: localPreset?.service || "",
+      value: localPreset?.value || "",
+      payment: suggestedPayment || localPreset?.payment || "PIX",
+      dayOfWeek: suggestedDay || localPreset?.dayOfWeek || "",
+      time: suggestedTime || localPreset?.time || "",
+      barberId: suggestedBarberId ? Number(suggestedBarberId) : localPreset?.barberId || ""
+    };
+
+    setLocalPreset(newPreset);
+    updateMutation.mutate({ preset: newPreset });
+  };
 
   const clientAppointments = useMemo(() => {
     if (!client) return [];
@@ -66,6 +166,60 @@ export default function ClientProfilePage() {
         return dateB.getTime() - dateA.getTime();
       });
   }, [appointments, client]);
+
+  const lastPlanDayNumber = useMemo(() => {
+    if (!client) return 0;
+    const limit = client.limite_cortes || 4;
+    for (const appt of clientAppointments) {
+      const serviceName = appt.service?.toUpperCase().trim() || "";
+      if (serviceName === "RENOVAÇÃO 1º DIA") {
+        return 1;
+      }
+      const match = serviceName.match(/^(\d+)º\s*DIA$/);
+      if (match) {
+        const num = parseInt(match[1]);
+        if (num > 0 && num <= limit) {
+          return num;
+        }
+      }
+    }
+    return 0;
+  }, [clientAppointments, client?.limite_cortes]);
+
+  const computedAppointmentsWithNames = useMemo(() => {
+    if (!client) return [];
+
+    if (procedureNaming === "preset") {
+      const presetService = client.preset?.service || "A DEFINIR";
+      return generatedAppointments.map(appt => ({
+        ...appt,
+        procedureName: presetService
+      }));
+    }
+
+    const limit = client.limite_cortes || 4;
+    let currentDayNumber = lastPlanDayNumber;
+    const isFirstEver = lastPlanDayNumber === 0;
+
+    return generatedAppointments.map((appt, idx) => {
+      currentDayNumber++;
+      if (currentDayNumber > limit) {
+        currentDayNumber = 1;
+      }
+
+      let name = "";
+      if (currentDayNumber === 1) {
+        name = (isFirstEver && idx === 0) ? "1º DIA" : "RENOVAÇÃO 1º DIA";
+      } else {
+        name = `${currentDayNumber}º DIA`;
+      }
+
+      return {
+        ...appt,
+        procedureName: name
+      };
+    });
+  }, [generatedAppointments, procedureNaming, client, lastPlanDayNumber]);
 
   const stats = useMemo(() => {
     const todayStr = format(new Date(), "yyyy-MM-dd");
@@ -106,7 +260,7 @@ export default function ClientProfilePage() {
   useEffect(() => {
     if (!client?.nome) return;
     const fetchUsage = async () => {
-      // 1. Find the latest "RENOVAÇÃO" appointment date for this client
+      // Find the latest "RENOVAÇÃO" appointment date for this client
       const { data: latestRenov } = await supabase
         .from("agendamentos")
         .select("data")
@@ -115,35 +269,31 @@ export default function ClientProfilePage() {
         .order("data", { ascending: false })
         .limit(1);
 
-      const dbRenovDate = latestRenov?.[0]?.data;
-      const manualResetDate = client.plano_pagamento;
+      const startDate = latestRenov?.[0]?.data;
 
-      // The cycle starts at the LATEST of the last physical renovation or the manual reset date
-      let startDate = dbRenovDate;
-      if (!startDate || (manualResetDate && manualResetDate > startDate)) {
-        startDate = manualResetDate;
-      }
-
-      const todayStr = format(new Date(), "yyyy-MM-dd");
-
-      // 2. Count UNIQUE DAYS of usage from that date forward (up to TODAY)
+      // Count UNIQUE DAYS of usage from that date forward
       let query = supabase
         .from("agendamentos")
-        .select("data")
+        .select("data, procedimento")
         .ilike("cliente", client.nome)
-        .neq("cliente", "PAUSA")
-        .lte("data", todayStr);
+        .neq("cliente", "PAUSA");
 
       if (startDate) {
         query = query.gte("data", startDate);
       }
 
       const { data: usageData } = await query;
-      const uniqueDays = new Set(usageData?.map(u => u.data)).size;
-      setDbUsage(uniqueDays);
+      
+      const filteredUsage = (usageData || []).filter(u => {
+        const proc = (u.procedimento || "").toUpperCase().trim();
+        if (proc === "RENOVAÇÃO 1º DIA") return true;
+        return /^(\d+)º\s*DIA$/.test(proc);
+      });
+
+      setDbUsage(filteredUsage.length);
     };
     fetchUsage();
-  }, [client, supabase]);
+  }, [client, supabase, appointments]);
 
   // Mutations
   const updateMutation = useMutation({
@@ -185,7 +335,7 @@ export default function ClientProfilePage() {
     },
     onError: (err: any) => {
       console.error("Name update mutation error detail:", err.message || err.details || err);
-      alert(`Erro ao atualizar o nome do cliente: ${err.message || JSON.stringify(err)}`);
+      triggerAlert("Erro", `Erro ao atualizar o nome do cliente: ${err.message || JSON.stringify(err)}`);
     }
   });
 
@@ -198,7 +348,10 @@ export default function ClientProfilePage() {
   const updateAppointmentMutation = useMutation({
     mutationFn: async ({ id: apptId, updates, barberId }: { id: string, updates: any, barberId?: string | number | null }) => {
       const dbUpdates: any = {};
-      if (updates.service !== undefined) dbUpdates.procedimento = updates.service;
+      if (updates.service !== undefined) {
+        const trimmed = String(updates.service).trim();
+        dbUpdates.procedimento = /^\d+$/.test(trimmed) ? `${trimmed}º DIA` : updates.service;
+      }
       if (updates.value !== undefined) dbUpdates.valor = updates.value;
       if (updates.observations !== undefined) dbUpdates.observacoes = updates.observations;
       if (updates.paymentMethod !== undefined) dbUpdates.forma_pagamento = updates.paymentMethod;
@@ -222,15 +375,16 @@ export default function ClientProfilePage() {
 
   const saveBatchMutation = useMutation({
     mutationFn: async () => {
-      for (let i = 0; i < generatedAppointments.length; i++) {
-        const appt = generatedAppointments[i];
+      const appointmentsToSave = computedAppointmentsWithNames;
+      for (let i = 0; i < appointmentsToSave.length; i++) {
+        const appt = appointmentsToSave[i];
         const tableName = Number(appt.barberId) === 3 ? "agendamentos_joao_lucas" : "agendamentos_lucas";
         const matchedBarber = barbers.find((b: any) => Number(b.id) === Number(appt.barberId));
         const barberName = matchedBarber ? matchedBarber.nome : "";
 
         const { error } = await supabase.from(tableName).insert({
           cliente: client.nome,
-          procedimento: `${i + 1}º DIA`,
+          procedimento: appt.procedureName,
           valor: parseFloat(client.preset?.value) || 0,
           forma_pagamento: client.preset?.payment || "PLANO",
           observacoes: "AGENDAMENTO AUTOMÁTICO DO PLANO",
@@ -249,7 +403,7 @@ export default function ClientProfilePage() {
     }
   });
 
-  const getNextFourDates = (dayOfWeekName: string): string[] => {
+  const getNextFourDates = (dayOfWeekName: string, count: number = 4): string[] => {
     const daysMap: { [key: string]: number } = {
       "domingo": 0, "segunda-feira": 1, "terça-feira": 2, "quarta-feira": 3,
       "quinta-feira": 4, "sexta-feira": 5, "sábado": 6
@@ -260,7 +414,7 @@ export default function ClientProfilePage() {
     const dates: string[] = [];
     const currentDate = new Date();
     
-    while (dates.length < 4) {
+    while (dates.length < count) {
       currentDate.setDate(currentDate.getDate() + 1);
       if (currentDate.getDay() === targetDay) {
         dates.push(format(currentDate, "yyyy-MM-dd"));
@@ -326,21 +480,24 @@ export default function ClientProfilePage() {
     const presetBarberId = localPreset?.barberId ? Number(localPreset.barberId) : (barbers[0]?.id || 1);
 
     if (!presetDay) {
-      alert("Por favor, configure o Dia da Semana Padrão no Preset primeiro.");
+      triggerAlert("Aviso", "Por favor, configure o Dia da Semana Padrão no Preset primeiro.");
       return;
     }
 
-    const nextDates = getNextFourDates(presetDay);
+    const hasPlan = client.plano && client.plano !== "Nenhum";
+    const batchSize = hasPlan ? (client.limite_cortes || 4) : 4;
+
+    const nextDates = getNextFourDates(presetDay, batchSize);
     if (nextDates.length === 0) return;
 
     // Reset settings to defaults
     setIntervalDays(7);
-    setBatchCount(4);
+    setBatchCount(batchSize);
     const initialFirstDate = nextDates[0];
     setFirstDate(initialFirstDate);
 
     // Initial list based on defaults
-    const list = Array.from({ length: 4 }).map((_, idx) => {
+    const list = Array.from({ length: batchSize }).map((_, idx) => {
       const date = new Date(initialFirstDate + "T12:00:00");
       date.setDate(date.getDate() + (idx * 7));
       return {
@@ -435,23 +592,33 @@ export default function ClientProfilePage() {
 
       {/* Preset Section */}
       {(showPreset || client.preset) && (
-        <div className="bg-surface-section/30 p-6 rounded-[2rem] space-y-6 border border-brand-primary/5 animate-in slide-in-from-top-4 duration-300">
-          <div className="flex justify-between items-center px-2">
-            <div className="flex items-center gap-3">
-              <Wand2 size={14} className="text-brand-primary" />
-              <h3 className="text-[10px] font-black text-white uppercase tracking-widest">Preset — Inteligência de Atendimento</h3>
+        <div className="bg-surface-section/30 p-5 rounded-2xl space-y-4 border border-brand-primary/5 animate-in slide-in-from-top-4 duration-300">
+          <div className="flex justify-between items-center px-1">
+            <div className="flex items-center gap-2">
+              <Wand2 size={12} className="text-brand-primary" />
+              <h3 className="text-[9px] font-black text-white uppercase tracking-widest">Preset — Inteligência de Atendimento</h3>
             </div>
-            {client.preset && (
+            <div className="flex items-center gap-2">
               <button 
-                onClick={() => { if(confirm("Remover preset de automação?")) updateMutation.mutate({ preset: null }) }}
-                className="text-[8px] font-black text-rose-500 uppercase tracking-widest hover:bg-rose-500/10 px-3 py-1.5 rounded-lg transition-all"
+                type="button"
+                onClick={handleSuggestPresets}
+                className="text-[8px] font-black text-brand-primary uppercase tracking-widest hover:bg-brand-primary/10 px-2 py-1 rounded-md transition-all"
               >
-                Limpar Preset
+                Sugerir via Histórico
               </button>
-            )}
+              {client.preset && (
+                <button 
+                  type="button"
+                  onClick={() => setIsRemovePresetModalOpen(true)}
+                  className="text-[8px] font-black text-rose-500 uppercase tracking-widest hover:bg-rose-500/10 px-2 py-1 rounded-md transition-all"
+                >
+                  Limpar Preset
+                </button>
+              )}
+            </div>
           </div>
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
             {[
               { label: "Serviço Padrão", field: "service", placeholder: "EX: CORTE", value: localPreset?.service || "" },
               { label: "Valor Padrão", field: "value", placeholder: "R$ 0,00", value: localPreset?.value || "" },
@@ -460,8 +627,8 @@ export default function ClientProfilePage() {
               { label: "Horário Padrão", field: "time", placeholder: "EX: 14:00", value: localPreset?.time || "" },
               { label: "Barbeiro Padrão", field: "barberId", value: localPreset?.barberId || "" }
             ].map((cfg, i) => (
-              <div key={i} className="bg-surface-page/50 p-4 rounded-xl space-y-1">
-                <p className="text-[8px] font-black text-text-muted uppercase tracking-widest">{cfg.label}</p>
+              <div key={i} className="bg-surface-page/50 p-2.5 rounded-lg space-y-0.5">
+                <p className="text-[8px] font-black text-text-muted uppercase tracking-widest leading-none">{cfg.label}</p>
                 {cfg.field === "payment" ? (
                   <PaymentSelector
                     value={cfg.value}
@@ -484,7 +651,7 @@ export default function ClientProfilePage() {
                       setLocalPreset(updatedPreset);
                       updateMutation.mutate({ preset: updatedPreset });
                     }}
-                    className="w-full text-left px-0 py-0.5 justify-start text-[12px] font-black text-white h-auto bg-transparent hover:bg-transparent"
+                    className="w-full text-left px-0 py-0.5 justify-start text-[11px] font-black text-white h-auto bg-transparent hover:bg-transparent"
                     dropdownClassName="left-0 right-auto min-w-[160px]"
                   />
                 ) : cfg.field === "barberId" ? (
@@ -499,7 +666,7 @@ export default function ClientProfilePage() {
                       setLocalPreset(updatedPreset);
                       updateMutation.mutate({ preset: updatedPreset });
                     }}
-                    className="w-full text-left px-0 py-0.5 justify-start text-[12px] font-black text-white h-auto bg-transparent hover:bg-transparent"
+                    className="w-full text-left px-0 py-0.5 justify-start text-[11px] font-black text-white h-auto bg-transparent hover:bg-transparent"
                     dropdownClassName="left-0 right-auto min-w-[160px]"
                   />
                 ) : (
@@ -512,10 +679,16 @@ export default function ClientProfilePage() {
                     }}
                     onBlur={(e) => {
                       const val = e.target.value;
-                      const updatedPreset = { ...(localPreset || {}), [cfg.field]: cfg.field === "service" ? val.toUpperCase() : val };
+                      let formattedVal = val;
+                      if (cfg.field === "service") {
+                        const trimmed = val.trim();
+                        formattedVal = /^\d+$/.test(trimmed) ? `${trimmed}º DIA` : trimmed;
+                        formattedVal = formattedVal.toUpperCase();
+                      }
+                      const updatedPreset = { ...(localPreset || {}), [cfg.field]: formattedVal };
                       updateMutation.mutate({ preset: updatedPreset });
                     }}
-                    className="bg-transparent border-none text-[12px] font-black text-white uppercase outline-none w-full p-0"
+                    className="bg-transparent border-none text-[11px] font-black text-white uppercase outline-none w-full p-0"
                   />
                 )}
               </div>
@@ -523,14 +696,14 @@ export default function ClientProfilePage() {
           </div>
 
           {localPreset?.dayOfWeek && (
-            <div className="flex justify-end pt-2 border-none">
+            <div className="flex justify-end pt-1 border-none">
               <button
                 type="button"
                 onClick={handleGenerateBatch}
-                className="py-2.5 px-5 rounded-xl bg-brand-primary text-surface-page text-[9px] font-black uppercase tracking-wider border-none transition-all active:scale-95 cursor-pointer flex items-center gap-2"
+                className="py-2 px-4 rounded-lg bg-brand-primary text-surface-page text-[8px] font-black uppercase tracking-wider border-none transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
               >
-                <CalendarPlus size={14} />
-                Gerar Lote de 4 Agendamentos do Plano
+                <CalendarPlus size={12} />
+                Gerar Lote de {client.plano && client.plano !== "Nenhum" ? (client.limite_cortes || 4) : 4} Agendamentos
               </button>
             </div>
           )}
@@ -539,95 +712,78 @@ export default function ClientProfilePage() {
 
       {/* Plan Details */}
       {client.plano !== "Nenhum" && (
-        <div className="bg-surface-section/30 p-8 rounded-[2.5rem] space-y-8 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-brand-primary/5 blur-[100px] pointer-events-none" />
+        <div className="bg-surface-section/30 p-5 rounded-2xl space-y-4 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-48 h-48 bg-brand-primary/5 blur-[80px] pointer-events-none" />
           
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-brand-primary/10 flex items-center justify-center text-brand-primary">
-                <Crown size={20} />
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-brand-primary/10 flex items-center justify-center text-brand-primary shrink-0">
+                <Crown size={16} />
               </div>
               <div>
-                <select 
-                  value={client.plano || ""}
-                  onChange={(e) => updateMutation.mutate({ plano: e.target.value })}
-                  className="bg-transparent border-none text-xl font-black text-white uppercase tracking-tighter outline-none cursor-pointer hover:text-brand-primary transition-colors appearance-none"
-                >
-                  {["Nenhum", "Mensal", "Semestral", "Anual", "Pausado"].map(p => (
-                    <option key={p} value={p} className="bg-surface-section">{p} Plan</option>
-                  ))}
-                </select>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="w-1 h-1 rounded-full bg-brand-primary" />
-                  <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Status: Ativo em Ciclo</p>
+                <div className="flex items-center gap-2">
+                  <select 
+                    value={client.plano || ""}
+                    onChange={(e) => updateMutation.mutate({ plano: e.target.value })}
+                    className="bg-transparent border-none text-base font-black text-white uppercase tracking-tighter outline-none cursor-pointer hover:text-brand-primary transition-colors appearance-none"
+                  >
+                    {["Nenhum", "Mensal", "Semestral", "Anual", "Pausado"].map(p => (
+                      <option key={p} value={p} className="bg-surface-section">{p} Plan</option>
+                    ))}
+                  </select>
+                  <span className="w-1.5 h-1.5 rounded-full bg-brand-primary" />
+                  <span className="text-[8px] font-black text-text-muted uppercase tracking-widest">Ciclo Ativo</span>
                 </div>
               </div>
             </div>
-            <button 
-              onClick={() => { if(confirm("Reiniciar ciclo de faturamento hoje?")) updateMutation.mutate({ plano_pagamento: new Date().toISOString().split("T")[0] }) }}
-              className="text-[9px] font-black text-brand-primary hover:text-white uppercase tracking-widest flex items-center gap-2 px-4 py-2 bg-white/5 rounded-xl transition-all"
-            >
-              <RotateCcw size={12} /> Resetar Ciclo
-            </button>
+          </div>
+ 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+            {/* Credit Usage */}
+            <div className="space-y-2 bg-surface-page/20 p-3.5 rounded-xl">
+              <div className="flex justify-between items-center">
+                <p className="text-[8px] font-black text-text-muted uppercase tracking-widest">Uso de Créditos</p>
+                <span className={cn("text-[10px] font-black", planUsage.over ? "text-rose-400" : "text-brand-primary")}>{planUsage.pct}%</span>
+              </div>
+              <div className="flex items-baseline gap-1.5">
+                <h4 className={cn("text-2xl font-display font-black leading-none", planUsage.over ? "text-rose-400" : "text-white")}>{planUsage.used}</h4>
+                <span className="text-sm font-bold text-text-muted">/</span>
+                <InlineInput
+                  type="number"
+                  value={client.limite_cortes || 0}
+                  onSave={(v) => updateMutation.mutate({ limite_cortes: parseInt(v) })}
+                  className="text-lg font-black text-text-muted p-0 w-12 bg-transparent h-auto inline-block"
+                />
+              </div>
+              <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                <div className={cn("h-full transition-all duration-700", planUsage.over ? "bg-rose-500/60" : "bg-brand-primary/50")} style={{ width: `${planUsage.pct}%` }} />
+              </div>
+            </div>
+
+            {/* Plan Value */}
+            <div className="bg-surface-page/20 p-3.5 rounded-xl flex flex-col justify-between h-full space-y-1">
+              <p className="text-[8px] font-black text-text-muted uppercase tracking-widest">Valor do Plano</p>
+              <div className="flex items-baseline gap-1">
+                <span className="text-[10px] font-bold text-text-muted">R$</span>
+                <InlineInput
+                  type="number"
+                  value={client.valor_plano?.toFixed(2)}
+                  onSave={(v) => updateMutation.mutate({ valor_plano: parseFloat(v) })}
+                  className="text-lg font-black text-white p-0 h-auto w-24 bg-transparent"
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
-             <div className="space-y-4">
-                <div className="flex justify-between items-end px-2">
-                  <div className="space-y-1">
-                    <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Uso de Créditos</p>
-                    <div className="flex items-center gap-2">
-                      <h4 className={cn("text-3xl font-display font-black", planUsage.over ? "text-rose-400" : "text-white")}>{planUsage.used}</h4>
-                      <span className="text-lg font-bold text-text-muted">/</span>
-                      <InlineInput
-                        type="number"
-                        value={client.limite_cortes || 0}
-                        onSave={(v) => updateMutation.mutate({ limite_cortes: parseInt(v) })}
-                        className="text-2xl font-black text-text-muted p-0 w-16"
-                      />
-                    </div>
-                  </div>
-                  <span className={cn("text-sm font-black", planUsage.over ? "text-rose-400" : "text-brand-primary")}>{planUsage.pct}%</span>
-                </div>
-                <div className="h-2 bg-white/5 rounded-full overflow-hidden">
-                  <div className={cn("h-full transition-all duration-700", planUsage.over ? "bg-rose-500/60" : "bg-brand-primary/50")} style={{ width: `${planUsage.pct}%` }} />
-                </div>
-             </div>
-
-             <div className="bg-surface-page/30 p-6 rounded-2xl grid grid-cols-2 gap-6">
-                <div className="space-y-1">
-                  <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Valor do Plano</p>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-bold text-text-muted">R$</span>
-                    <InlineInput
-                      type="number"
-                      value={client.valor_plano?.toFixed(2)}
-                      onSave={(v) => updateMutation.mutate({ valor_plano: parseFloat(v) })}
-                      className="text-xl font-black text-white p-0 h-auto"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1 text-right">
-                  <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Vencimento</p>
-                  <input 
-                    type="date"
-                    defaultValue={client.plano_pagamento}
-                    onChange={(e) => updateMutation.mutate({ plano_pagamento: e.target.value })}
-                    className="bg-transparent border-none text-sm font-black text-white outline-none cursor-pointer text-right uppercase" style={{ colorScheme: "dark" }}
-                  />
-                </div>
-             </div>
-          </div>
-
-          <div className="pt-6 border-t border-white/5">
-            <div className="flex items-center gap-2 mb-2">
+          <div className="pt-3 border-t border-white/5 flex items-center gap-3">
+            <div className="flex items-center gap-1.5 shrink-0">
               <Edit3 size={10} className="text-text-muted" />
-              <p className="text-[9px] font-black text-text-muted uppercase tracking-widest">Observações do Plano</p>
+              <p className="text-[8px] font-black text-text-muted uppercase tracking-widest">Notas:</p>
             </div>
             <InlineInput
               value={client.observacoes_plano || "Adicionar observação específica do plano..."}
               onSave={(v) => updateMutation.mutate({ observacoes_plano: v })}
-              className="text-xs text-text-muted font-medium italic p-0 hover:text-white transition-all h-auto w-full block"
+              className="text-xs text-text-muted font-medium italic p-0 hover:text-white transition-all h-auto flex-1 bg-transparent"
             />
           </div>
         </div>
@@ -643,68 +799,92 @@ export default function ClientProfilePage() {
 
          <div className="space-y-2">
             {clientAppointments.length === 0 ? (
-              <div className="py-20 text-center text-text-muted italic text-[10px] uppercase font-bold tracking-widest opacity-20">Sem histórico</div>
+               <div className="py-20 text-center text-text-muted italic text-[10px] uppercase font-bold tracking-widest opacity-20">Sem histórico</div>
             ) : (
-              clientAppointments.map((appt) => (
-                <div key={appt.id} className="flex flex-col md:flex-row items-start md:items-center gap-4 px-6 py-5 bg-surface-section/20 hover:bg-surface-section/40 rounded-3xl transition-all group border-none">
-                  <div className="flex items-center gap-4 shrink-0">
-                    <div className="w-12 h-12 rounded-2xl bg-surface-page flex flex-col items-center justify-center shadow-lg">
-                      <span className="text-[12px] font-black text-brand-primary leading-none">{format(parseISO(appt.date), "dd")}</span>
-                      <span className="text-[8px] font-black text-text-muted uppercase leading-none mt-0.5">{format(parseISO(appt.date), "MMM", { locale: ptBR })}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-text-muted">
-                        <Clock size={12} />
-                        <InlineInput
-                          type="text"
-                          value={appt.time?.substring(0, 5)}
-                          onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { time: v }, barberId: appt.barberId })}
-                          className="text-[11px] font-bold p-0 bg-transparent hover:bg-transparent h-auto"
-                        />
-                    </div>
-                  </div>
+               clientAppointments.map((appt) => {
+                 const handleCardClick = (e: React.MouseEvent) => {
+                   const target = e.target as HTMLElement;
+                   if (target.closest("input, button, select, [role='button'], .interactive")) {
+                     return;
+                   }
+                   setSelectedDate(parseISO(appt.date));
+                   router.push("/agenda");
+                 };
 
-                  <div className="flex-1 min-w-0 md:pl-4 space-y-0.5">
-                    <div className="flex items-center gap-3">
-                      <InlineAutocomplete
-                        value={appt.service}
-                        suggestions={serviceSuggestions}
-                        onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { service: v }, barberId: appt.barberId })}
-                        className="text-[12px] font-black text-white uppercase tracking-wide group-hover:text-brand-primary transition-colors h-auto"
-                      />
-                      <PaymentSelector
-                        value={appt.paymentMethod || "PIX"}
-                        onChange={(val) => updateAppointmentMutation.mutate({ id: appt.id, updates: { paymentMethod: val }, barberId: appt.barberId })}
-                        isCompact
-                        className="w-[120px]"
-                      />
-                    </div>
-                    <InlineInput
-                      value={appt.observations || ""}
-                      placeholder="Adicionar observação..."
-                      onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { observations: v }, barberId: appt.barberId })}
-                      className="text-[10px] text-text-muted italic truncate max-w-lg p-0 bg-transparent hover:bg-white/5 transition-all text-left block"
-                    />
-                  </div>
+                 return (
+                   <div 
+                     key={appt.id} 
+                     onClick={handleCardClick}
+                     className="flex flex-col md:flex-row items-start md:items-center gap-4 px-6 py-5 bg-surface-section/20 hover:bg-surface-section/40 rounded-3xl transition-all group border-none cursor-pointer"
+                   >
+                     <div className="flex items-center gap-4 shrink-0">
+                       <div className="w-12 h-12 rounded-2xl bg-surface-page flex flex-col items-center justify-center shadow-lg">
+                         <span className="text-[12px] font-black text-brand-primary leading-none">{format(parseISO(appt.date), "dd")}</span>
+                         <span className="text-[8px] font-black text-text-muted uppercase leading-none mt-0.5">{format(parseISO(appt.date), "MMM", { locale: ptBR })}</span>
+                       </div>
+                       <div className="flex items-center gap-1.5 text-text-muted" onClick={(e) => e.stopPropagation()}>
+                          <Clock size={12} />
+                          <InlineInput
+                            type="text"
+                            value={appt.time?.substring(0, 5)}
+                            onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { time: v }, barberId: appt.barberId })}
+                            className="text-[11px] font-bold p-0 bg-transparent hover:bg-transparent h-auto"
+                          />
+                       </div>
+                     </div>
 
-                  <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end mt-4 md:mt-0">
-                    <div className="flex items-center gap-1.5 font-display font-black text-lg text-white">
-                      <span className="text-[10px] text-text-muted">R$</span>
-                      <InlineInput
-                        type="number"
-                        value={appt.value?.toString() || "0"}
-                        onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { value: parseFloat(v) || 0 }, barberId: appt.barberId })}
-                        className="p-0 bg-transparent hover:bg-white/5 transition-all h-auto w-16"
-                      />
-                    </div>
-                    <button 
-                      onClick={() => { if(confirm("Excluir este agendamento do histórico?")) deleteAppointmentMutation.mutate({ apptId: appt.id, barberId: appt.barberId }) }}
-                      className="p-3 rounded-2xl bg-white/5 text-text-muted hover:text-rose-500 hover:bg-rose-500/10 transition-all border-none"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-              ))
+                     <div className="flex-1 min-w-0 md:pl-4 space-y-0.5" onClick={(e) => e.stopPropagation()}>
+                       <div className="flex items-center gap-3">
+                         <InlineAutocomplete
+                           value={appt.service}
+                           suggestions={serviceSuggestions}
+                           onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { service: v }, barberId: appt.barberId })}
+                           className="text-[12px] font-black text-white uppercase tracking-wide group-hover:text-brand-primary transition-colors h-auto"
+                         />
+                         <PaymentSelector
+                           value={appt.paymentMethod || "PIX"}
+                           onChange={(val) => updateAppointmentMutation.mutate({ id: appt.id, updates: { paymentMethod: val }, barberId: appt.barberId })}
+                           isCompact
+                           className="w-[120px]"
+                         />
+                       </div>
+                       <InlineInput
+                         value={appt.observations || ""}
+                         placeholder="Adicionar observação..."
+                         onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { observations: v }, barberId: appt.barberId })}
+                         className="text-[10px] text-text-muted italic truncate max-w-lg p-0 bg-transparent hover:bg-white/5 transition-all text-left block"
+                       />
+                     </div>
+
+                     <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end mt-4 md:mt-0" onClick={(e) => e.stopPropagation()}>
+                       <div className="flex items-center gap-1.5 font-display font-black text-lg text-white">
+                         <span className="text-[10px] text-text-muted">R$</span>
+                         <InlineInput
+                           type="number"
+                           value={appt.value?.toString() || "0"}
+                           onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { value: parseFloat(v) || 0 }, barberId: appt.barberId })}
+                           className="p-0 bg-transparent hover:bg-white/5 transition-all h-auto w-16"
+                         />
+                       </div>
+                       <button 
+                         onClick={(e) => handleDeleteClick(e, appt.id, appt.barberId)}
+                         className={cn(
+                           "p-3 rounded-2xl bg-white/5 transition-all border-none shrink-0 w-11 h-11 flex items-center justify-center",
+                           confirmingDeleteId === appt.id 
+                             ? "text-rose-500 hover:bg-rose-500 hover:text-white" 
+                             : "text-text-muted hover:text-rose-500 hover:bg-rose-500/10"
+                         )}
+                       >
+                         {confirmingDeleteId === appt.id ? (
+                           <span className="font-black text-[13px] leading-none animate-pulse">?</span>
+                         ) : (
+                           <Trash2 size={16} />
+                         )}
+                       </button>
+                     </div>
+                   </div>
+                 );
+               })
             )}
          </div>
       </div>
@@ -837,12 +1017,25 @@ export default function ClientProfilePage() {
             </div>
           </div>
 
+          {/* Procedure Naming Selection Dropdown */}
+          <div className="figma-form-group">
+            <label className="figma-form-label">Procedimento nos Agendamentos</label>
+            <select
+              value={procedureNaming}
+              onChange={(e) => setProcedureNaming(e.target.value as "preset" | "x-dia")}
+              className="w-full py-2.5 px-4 rounded-xl bg-surface-page border border-white/[0.05] text-[11px] font-black uppercase outline-none text-white focus:border-brand-primary transition-all cursor-pointer"
+            >
+              <option value="preset" className="bg-[#121214]">Usar Preset do Cliente ({client.preset?.service || "A DEFINIR"})</option>
+              <option value="x-dia" className="bg-[#121214]">Usar Contagem do Plano ("Xº DIA")</option>
+            </select>
+          </div>
+
           <p className="text-[11px] font-bold text-text-secondary leading-normal">
             Confirme as datas e horários dos {batchCount} agendamentos do plano para <span className="text-white font-black uppercase">"{client.nome}"</span>:
           </p>
 
           <div className="space-y-3">
-            {generatedAppointments.map((appt, idx) => (
+            {computedAppointmentsWithNames.map((appt, idx) => (
               <div key={idx} className="bg-surface-page/50 p-3 rounded-xl flex items-center justify-between gap-3 border border-white/5 relative">
                 {/* Calendar Button for Individual Week Date */}
                 <div className="flex flex-col gap-1 relative">
@@ -904,6 +1097,11 @@ export default function ClientProfilePage() {
                     dropdownClassName="left-auto right-0 min-w-[120px]"
                   />
                 </div>
+
+                <div className="flex flex-col gap-1 min-w-[100px] shrink-0 text-right">
+                  <span className="text-[8px] font-black text-text-muted uppercase tracking-widest">Procedimento</span>
+                  <span className="text-[11px] font-black text-brand-primary uppercase truncate max-w-[120px]">{appt.procedureName}</span>
+                </div>
               </div>
             ))}
           </div>
@@ -923,6 +1121,55 @@ export default function ClientProfilePage() {
                 setShowFirstDatePicker(false);
                 setActiveDatePickerIdx(null);
               }}
+              className="w-full py-2 bg-transparent text-text-muted hover:text-white text-[9px] font-black uppercase tracking-wider border-none cursor-pointer"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Alert Modal */}
+      <Modal
+        isOpen={alertConfig.isOpen}
+        onClose={() => setAlertConfig(prev => ({ ...prev, isOpen: false }))}
+        title={alertConfig.title}
+      >
+        <div className="flex flex-col gap-4 py-1 text-center">
+          <p className="text-[11px] font-bold text-text-secondary leading-normal">
+            {alertConfig.message}
+          </p>
+          <button
+            onClick={() => setAlertConfig(prev => ({ ...prev, isOpen: false }))}
+            className="w-full py-2.5 rounded-xl bg-brand-primary text-surface-page text-[9px] font-black uppercase tracking-wider border-none transition-all active:scale-95 cursor-pointer"
+          >
+            Ok
+          </button>
+        </div>
+      </Modal>
+
+      {/* Remove Preset Confirm Modal */}
+      <Modal
+        isOpen={isRemovePresetModalOpen}
+        onClose={() => setIsRemovePresetModalOpen(false)}
+        title="Remover Preset"
+      >
+        <div className="flex flex-col gap-4 py-1 text-center">
+          <p className="text-[11px] font-bold text-text-secondary leading-normal">
+            Deseja mesmo remover o preset de automação deste cliente?
+          </p>
+          <div className="flex flex-col gap-2 w-full">
+            <button
+              onClick={() => {
+                updateMutation.mutate({ preset: null });
+                setIsRemovePresetModalOpen(false);
+              }}
+              className="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[9px] font-black uppercase tracking-wider border-none transition-all active:scale-95 cursor-pointer"
+            >
+              Remover Preset
+            </button>
+            <button
+              onClick={() => setIsRemovePresetModalOpen(false)}
               className="w-full py-2 bg-transparent text-text-muted hover:text-white text-[9px] font-black uppercase tracking-wider border-none cursor-pointer"
             >
               Cancelar

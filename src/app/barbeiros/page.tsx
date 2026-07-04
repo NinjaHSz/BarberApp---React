@@ -17,6 +17,7 @@ export default function BarbersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBarber, setEditingBarber] = useState<any>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("list");
+  const [barberToDelete, setBarberToDelete] = useState<any | null>(null);
 
   const filteredBarbers = useMemo(() => {
     let result = [...barbers];
@@ -59,12 +60,10 @@ export default function BarbersPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["barbers"] }),
   });
 
-  const handleDelete = (id: string, e: React.MouseEvent) => {
+  const handleDelete = (barber: any, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (confirm("Deseja realmente remover este barbeiro? Agendamentos vinculados a ele ficarão sem barbeiro definido.")) {
-      deleteMutation.mutate(id);
-    }
+    setBarberToDelete(barber);
   };
 
   const handleOpenModal = (barber = null) => {
@@ -172,7 +171,7 @@ export default function BarbersPage() {
                   <Edit2 size={14} />
                 </button>
                 <button 
-                  onClick={(e) => handleDelete(barber.id, e)}
+                  onClick={(e) => handleDelete(barber, e)}
                   className="w-9 h-9 rounded-xl bg-white/5 text-rose-500/50 hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center border-none"
                 >
                   <Trash2 size={14} />
@@ -214,7 +213,7 @@ export default function BarbersPage() {
                     <Edit2 size={14} />
                   </button>
                   <button 
-                    onClick={(e) => handleDelete(barber.id, e)}
+                    onClick={(e) => handleDelete(barber, e)}
                     className="w-9 h-9 rounded-xl bg-white/5 text-rose-500/50 hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center border-none"
                   >
                     <Trash2 size={14} />
@@ -277,6 +276,42 @@ export default function BarbersPage() {
             {saveMutation.isPending ? "Salvando..." : "Salvar"}
           </button>
         </form>
+      </Modal>
+
+      {/* Delete Barber Confirmation Modal */}
+      <Modal
+        isOpen={!!barberToDelete}
+        onClose={() => setBarberToDelete(null)}
+        title="Remover Barbeiro"
+      >
+        <div className="flex flex-col gap-4 py-1 text-center">
+          <p className="text-[11px] font-bold text-text-secondary leading-normal">
+            Deseja realmente remover o barbeiro <span className="text-white font-black uppercase">"{barberToDelete?.nome}"</span>?
+            <br />
+            <span className="text-rose-400">Aviso:</span> Agendamentos vinculados a ele ficarão sem barbeiro definido.
+          </p>
+
+          <div className="flex flex-col gap-2 w-full">
+            <button
+              onClick={() => {
+                if (barberToDelete) {
+                  deleteMutation.mutate(barberToDelete.id);
+                  setBarberToDelete(null);
+                }
+              }}
+              disabled={deleteMutation.isPending}
+              className="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[9px] font-black uppercase tracking-wider border-none transition-all active:scale-95 cursor-pointer"
+            >
+              {deleteMutation.isPending ? "Removendo..." : "Sim, Remover Barbeiro"}
+            </button>
+            <button
+              onClick={() => setBarberToDelete(null)}
+              className="w-full py-2 bg-transparent text-text-muted hover:text-white text-[9px] font-black uppercase tracking-wider border-none cursor-pointer"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

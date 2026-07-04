@@ -1,7 +1,7 @@
 "use client";
  
-import { useClients, useSupabase } from "@/hooks/use-data";
-import { Plus, Search, Filter, Trash2, Edit2, User, Phone, MapPin, Crown, ChevronRight, XCircle, LayoutGrid, List, Check, Loader2, Sparkles, Link2 } from "lucide-react";
+import { useClients, useSupabase, useBarbers } from "@/hooks/use-data";
+import { Plus, Search, Filter, Trash2, Edit2, User, Phone, MapPin, Crown, ChevronRight, XCircle, LayoutGrid, List, Check, Loader2, Sparkles, Link2, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useMemo } from "react";
 import { PremiumSelector } from "@/components/shared/premium-selector";
@@ -100,6 +100,7 @@ export default function ClientsPage() {
   // State for Name Edit/Migration Modal
   const [isEditNameModalOpen, setIsEditNameModalOpen] = useState(false);
   const [pendingClientData, setPendingClientData] = useState<any>(null);
+  const [alertMessage, setAlertMessage] = useState<string | null>(null);
 
 
   const filteredClients = useMemo(() => {
@@ -179,7 +180,7 @@ export default function ClientsPage() {
     },
     onError: (err) => {
       console.error(err);
-      alert("Erro ao excluir o cliente.");
+      setAlertMessage("Erro ao excluir o cliente.");
     }
   });
 
@@ -279,6 +280,16 @@ export default function ClientsPage() {
           </div>
 
           {/* (removed Sync Button) */}
+
+          {/* Tabela Clientes Padrão Link button */}
+          <Link
+            href="/clientes/padrao"
+            className="h-10 px-4 bg-white/5 text-white hover:bg-white/10 hover:text-brand-primary rounded-2xl flex items-center justify-center gap-2 hover:scale-105 active:scale-95 transition-all border-none shrink-0 cursor-pointer text-[10px] font-black uppercase tracking-widest shadow-lg leading-none"
+            title="Clientes Padrão"
+          >
+            <Calendar size={14} className="text-brand-primary" strokeWidth={3} />
+            Clientes Padrão
+          </Link>
 
           {/* Cadastrar button as a small square next to search/filters */}
           <button
@@ -671,6 +682,27 @@ export default function ClientsPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Alert Modal */}
+      <Modal
+        isOpen={!!alertMessage}
+        onClose={() => setAlertMessage(null)}
+        title="Aviso"
+      >
+        <div className="flex flex-col gap-4 py-1 text-center">
+          <p className="text-[11px] font-bold text-text-secondary leading-normal">
+            {alertMessage}
+          </p>
+          <button
+            onClick={() => setAlertMessage(null)}
+            className="w-full py-2.5 rounded-xl bg-brand-primary text-surface-page text-[9px] font-black uppercase tracking-wider border-none transition-all active:scale-95 cursor-pointer"
+          >
+            Ok
+          </button>
+        </div>
+      </Modal>
+
+
     </div>
   );
 }

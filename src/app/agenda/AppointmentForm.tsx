@@ -178,22 +178,28 @@ export const AppointmentForm = memo(function AppointmentForm({
         startDate = manualResetDate;
       }
 
-      // 2. Query usage count since that start date (Count UNIQUE DAYS)
+      // 2. Query usage count since that start date
       let qUsage = supabase
         .from("agendamentos")
-        .select("data")
+        .select("data, procedimento")
         .ilike("cliente", clientObj.nome)
         .neq("cliente", "PAUSA"); 
       
       if (startDate) {
         qUsage = qUsage.gte("data", startDate);
       }
-      // Count unique days STRICTLY BEFORE the date being scheduled
+      // Count days STRICTLY BEFORE the date being scheduled
       qUsage = qUsage.lt("data", today);
       
       const { data: usageData } = await qUsage;
-      const uniqueDays = new Set(usageData?.map(u => u.data)).size;
-      const usedSoFar = uniqueDays;
+      
+      const filteredUsage = (usageData || []).filter(u => {
+        const proc = (u.procedimento || "").toUpperCase().trim();
+        if (proc === "RENOVAÇÃO 1º DIA") return true;
+        return /^(\d+)º\s*DIA$/.test(proc);
+      });
+
+      const usedSoFar = filteredUsage.length;
       const limite = clientObj.limite_cortes || 0;
 
       const nextDay = usedSoFar + 1;
@@ -498,11 +504,15 @@ export const AppointmentForm = memo(function AppointmentForm({
       {/* Salvar */}
       <button
         type="button"
-        onClick={() => onSave({ 
-          ...form, 
-          client: form.client?.trimEnd() || "---",
-          service: form.service?.trim() || "A DEFINIR" 
-        })}
+        onClick={() => {
+          const serviceVal = form.service?.trim() || "A DEFINIR";
+          const formattedService = /^\d+$/.test(serviceVal) ? `${serviceVal}º DIA` : serviceVal;
+          onSave({ 
+            ...form, 
+            client: form.client?.trimEnd() || "---",
+            service: formattedService 
+          });
+        }}
         className="w-full py-3 mt-2 rounded-2xl bg-brand-primary text-surface-page text-[11px] font-black uppercase tracking-widest border-none hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer shadow-lg shadow-brand-primary/10"
       >
         Salvar Agendamento

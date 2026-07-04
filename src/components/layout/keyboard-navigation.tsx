@@ -35,6 +35,9 @@ export function KeyboardNavigation() {
         case "5":
           router.push("/barbeiros");
           break;
+        case "6":
+          router.push("/clientes/padrao");
+          break;
         default:
           break;
       }

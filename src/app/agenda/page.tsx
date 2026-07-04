@@ -135,22 +135,28 @@ const RecordRow = memo(function RecordRowComponent({
         startDate = manualResetDate;
       }
 
-      // 2. Count UNIQUE DAYS of usage since that dynamic start
+      // 2. Count usage since that dynamic start
       let qUsage = supabase
         .from("agendamentos")
-        .select("data")
+        .select("data, procedimento")
         .ilike("cliente", match.nome)
         .neq("cliente", "PAUSA"); 
       
       if (startDate) {
         qUsage = qUsage.gte("data", startDate);
       }
-      // Count only unique days STRICTLY BEFORE the date being scheduled
+      // Count only days STRICTLY BEFORE the date being scheduled
       qUsage = qUsage.lt("data", today);
       
       const { data: usageData } = await qUsage;
-      const uniqueDays = new Set(usageData?.map(u => u.data)).size;
-      const usedSoFar = uniqueDays;
+      
+      const filteredUsage = (usageData || []).filter(u => {
+        const proc = (u.procedimento || "").toUpperCase().trim();
+        if (proc === "RENOVAÇÃO 1º DIA") return true;
+        return /^(\d+)º\s*DIA$/.test(proc);
+      });
+
+      const usedSoFar = filteredUsage.length;
       const limite = match.limite_cortes || 0;
       
       const nextDay = usedSoFar + 1;
@@ -251,8 +257,10 @@ const RecordRow = memo(function RecordRowComponent({
             placeholder={isEmpty ? "A DEFINIR" : "Serviço..."}
             suggestions={isBreak ? [] : serviceSuggestions}
             onSave={(val, item) => {
-              const updates: Partial<Appointment> = { service: val || "A DEFINIR" };
-              const match = procedures.find(p => p.nome?.toLowerCase().trim() === val?.toLowerCase().trim());
+              const trimmed = val?.trim() || "";
+              const formattedVal = /^\d+$/.test(trimmed) ? `${trimmed}º DIA` : val;
+              const updates: Partial<Appointment> = { service: formattedVal || "A DEFINIR" };
+              const match = procedures.find(p => p.nome?.toLowerCase().trim() === formattedVal?.toLowerCase().trim());
               if (match) {
                 updates.value = match.preco ?? match.valor ?? 0;
               } 
@@ -537,7 +545,10 @@ export default function AgendaPage() {
       if (updates.client !== undefined) {
         dbUpdates.cliente = typeof updates.client === "string" ? updates.client.trimEnd() : updates.client;
       }
-      if (updates.service !== undefined) dbUpdates.procedimento = updates.service;
+      if (updates.service !== undefined) {
+        const trimmed = String(updates.service).trim();
+        dbUpdates.procedimento = /^\d+$/.test(trimmed) ? `${trimmed}º DIA` : updates.service;
+      }
       if (updates.value !== undefined) dbUpdates.valor = updates.value;
       if (updates.observations !== undefined) dbUpdates.observacoes = updates.observations;
       if (updates.paymentMethod !== undefined) dbUpdates.forma_pagamento = updates.paymentMethod;
@@ -561,9 +572,11 @@ export default function AgendaPage() {
  
       if (id.startsWith('empty-')) {
         const cleanInsertName = typeof updates.client === "string" ? updates.client.trimEnd() : (updates.client || "---");
+        const serviceVal = String(updates.service || "A DEFINIR").trim();
+        const formattedService = /^\d+$/.test(serviceVal) ? `${serviceVal}º DIA` : (updates.service || "A DEFINIR");
         const { data, error } = await supabase.from(tableName).insert({
           cliente: cleanInsertName,
-          procedimento: updates.service || "A DEFINIR",
+          procedimento: formattedService,
           valor: updates.value || 0,
           forma_pagamento: updates.paymentMethod || "PIX",
           observacoes: updates.observations || "",
