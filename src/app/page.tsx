@@ -4,7 +4,7 @@ import { useDashboardRevenue } from "@/hooks/use-dashboard-revenue";
 import { buildChartLabels, type ChartGranularity } from "@/lib/dashboard-revenue";
 import { LayoutDashboard, CalendarDays, TrendingUp, ArrowDownRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { 
   format, 
   isToday, 
@@ -70,6 +70,31 @@ export default function DashboardPage() {
   const { data: revenueData, isLoading } = useDashboardRevenue(currentDate, chartTimeframe);
 
   const handleDayChange = useCallback((delta: number) => setCurrentDate(prev => delta > 0 ? addDays(prev, delta) : subDays(prev, Math.abs(delta))), [setCurrentDate]);
+
+  // Arrow keys day-by-day navigation
+  useEffect(() => {
+    const handleArrowKeys = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (
+        activeEl &&
+        (activeEl.tagName === "INPUT" ||
+          activeEl.tagName === "TEXTAREA" ||
+          activeEl.tagName === "SELECT" ||
+          activeEl.hasAttribute("contenteditable"))
+      ) {
+        return;
+      }
+
+      if (e.key === "ArrowLeft") {
+        handleDayChange(-1);
+      } else if (e.key === "ArrowRight") {
+        handleDayChange(1);
+      }
+    };
+
+    window.addEventListener("keydown", handleArrowKeys);
+    return () => window.removeEventListener("keydown", handleArrowKeys);
+  }, [handleDayChange]);
   const handleDaySelect = useCallback((day: number) => { setCurrentDate(prev => { const d = new Date(prev); d.setDate(day); return d; }); }, [setCurrentDate]);
   const handleMonthSelect = useCallback((month: number) => { setCurrentDate(prev => { const d = new Date(prev); d.setMonth(month - 1); return d; }); }, [setCurrentDate]);
   const handleYearSelect = useCallback((year: number) => { setCurrentDate(prev => { const d = new Date(prev); d.setFullYear(year); return d; }); }, [setCurrentDate]);

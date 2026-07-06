@@ -2,16 +2,42 @@
 
 import { useSupabase, useClients } from "@/hooks/use-data";
 import { cn } from "@/lib/utils";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { InlineAutocomplete } from "@/components/shared/inline-autocomplete";
-import { User } from "lucide-react";
+import { User, Plus } from "lucide-react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import { Modal } from "@/components/shared/modal";
+import { AutocompleteInput } from "@/components/shared/autocomplete-input";
 
 export default function ClientesPadraoPage() {
   const queryClient = useQueryClient();
   const supabase = useSupabase();
   const { data: clients = [] } = useClients();
+
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalDay, setModalDay] = useState("Segunda-feira");
+  const [modalTime, setModalTime] = useState("08:00");
+  const [modalClientName, setModalClientName] = useState("");
+
+  const handleOpenModal = (dayKey: string) => {
+    setModalDay(dayKey);
+    if (rowTimes.length > 0 && !rowTimes.includes(modalTime)) {
+      setModalTime(rowTimes[0]);
+    }
+    setModalClientName("");
+    setIsModalOpen(true);
+  };
+
+  const handleModalSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = modalClientName.trim();
+    if (!trimmed) return;
+    createPresetMutation.mutate({ time: modalTime, day: modalDay, clientName: trimmed });
+    setIsModalOpen(false);
+    setModalClientName("");
+  };
 
   const clientSuggestions = useMemo(() => {
     return clients.map((c: any) => ({
@@ -51,17 +77,34 @@ export default function ClientesPadraoPage() {
 
       if (trimmed === oldName) return;
 
-      const { error } = await supabase
+      // 1. Find or create client for newName
+      let { data: client, error: findError } = await supabase
         .from("clientes")
-        .update({ nome: trimmed })
-        .eq("id", id);
+        .select("id")
+        .ilike("nome", trimmed)
+        .maybeSingle();
+        
+      if (findError) throw findError;
+      
+      let clientId = client?.id;
+      if (!clientId) {
+        const { data: newClient, error: createError } = await supabase
+          .from("clientes")
+          .insert([{ nome: trimmed, plano: "Nenhum" }])
+          .select("id")
+          .single();
+          
+        if (createError) throw createError;
+        clientId = newClient.id;
+      }
+
+      // 2. Update client_id in clientes_padrao
+      const { error } = await supabase
+        .from("clientes_padrao")
+        .update({ cliente_id: clientId })
+        .eq("id", presetId);
 
       if (error) throw error;
-
-      if (oldName) {
-        await supabase.from("agendamentos_lucas").update({ cliente: trimmed }).ilike("cliente", oldName);
-        await supabase.from("agendamentos_joao_lucas").update({ cliente: trimmed }).ilike("cliente", oldName);
-      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clientes_padrao_presets"] });
@@ -201,12 +244,16 @@ export default function ClientesPadraoPage() {
               {weekdays.map((day, idx) => (
                 <th 
                   key={day.key} 
+                  onClick={() => handleOpenModal(day.key)}
                   className={cn(
-                    "py-2 px-3 text-[10px] font-black text-text-secondary uppercase tracking-widest text-center",
+                    "py-2 px-3 text-[10px] font-black text-text-secondary uppercase tracking-widest text-center group cursor-pointer hover:bg-surface-subtle/40 transition-colors select-none",
                     idx === weekdays.length - 1 && "rounded-r-xl"
                   )}
                 >
-                  {day.label}
+                  <div className="flex items-center justify-center gap-1">
+                    <span>{day.label}</span>
+                    <Plus size={10} className="opacity-0 group-hover:opacity-100 transition-opacity text-brand-primary stroke-[3]" />
+                  </div>
                 </th>
               ))}
             </tr>
@@ -217,7 +264,7 @@ export default function ClientesPadraoPage() {
                 <tr 
                   key={time} 
                   className={cn(
-                    "transition-colors",
+                    "transition-colors hover:bg-surface-subtle/30",
                     rowIdx % 2 === 0 ? "bg-surface-section/10" : "bg-transparent"
                   )}
                 >
@@ -282,6 +329,84 @@ export default function ClientesPadraoPage() {
           </tbody>
         </table>
       </div>
+
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title="Adicionar Cliente Padrão"
+        subtitle="Defina o nome, horário e dia da semana"
+        icon={<Plus size={20} strokeWidth={3} />}
+        className="w-full max-w-md bg-surface-card backdrop-blur-md p-6 rounded-2xl border-none shadow-2xl flex flex-col gap-4 text-left"
+      >
+        <form onSubmit={handleModalSubmit} className="space-y-4 pt-4">
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-text-secondary uppercase tracking-widest">
+              Nome do Cliente
+            </label>
+            <AutocompleteInput
+              value={modalClientName}
+              onChange={setModalClientName}
+              onSelect={(item) => setModalClientName(item.label)}
+              suggestions={clientSuggestions}
+              placeholder="Digite ou selecione o nome..."
+              inputClassName="w-full bg-surface-subtle border-none rounded-xl px-4 py-2.5 text-sm text-text-primary focus:ring-1 focus:ring-brand-primary placeholder:text-text-muted outline-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-text-secondary uppercase tracking-widest">
+                Horário
+              </label>
+              <select
+                value={modalTime}
+                onChange={(e) => setModalTime(e.target.value)}
+                className="w-full bg-surface-subtle border-none rounded-xl px-4 py-2.5 text-sm text-text-primary focus:ring-1 focus:ring-brand-primary appearance-none cursor-pointer outline-none"
+              >
+                {rowTimes.map((t) => (
+                  <option key={t} value={t} className="bg-surface-section text-text-primary">
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-text-secondary uppercase tracking-widest">
+                Dia da Semana
+              </label>
+              <select
+                value={modalDay}
+                onChange={(e) => setModalDay(e.target.value)}
+                className="w-full bg-surface-subtle border-none rounded-xl px-4 py-2.5 text-sm text-text-primary focus:ring-1 focus:ring-brand-primary appearance-none cursor-pointer outline-none"
+              >
+                {weekdays.map((d) => (
+                  <option key={d.key} value={d.key} className="bg-surface-section text-text-primary">
+                    {d.key}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="px-4 py-2 text-xs font-bold text-text-secondary uppercase tracking-widest hover:text-white transition-colors bg-transparent border-none outline-none"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={!modalClientName.trim() || createPresetMutation.isPending}
+              className="px-4 py-2 text-xs font-black text-surface-page bg-brand-primary rounded-xl uppercase tracking-widest hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-none outline-none"
+            >
+              {createPresetMutation.isPending ? "Salvando..." : "Salvar"}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

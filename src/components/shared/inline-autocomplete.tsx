@@ -40,7 +40,7 @@ export function InlineAutocomplete({
     
     if (!search) return suggestions.slice(0, 15);
     return suggestions
-      .filter((s) => normalizeText(s.label).includes(normalizeText(search)))
+      .filter((s) => normalizeText(s.label).startsWith(normalizeText(search)))
       .slice(0, 15);
   }, [inputValue, suggestions, placeholder]);
 
@@ -99,7 +99,7 @@ export function InlineAutocomplete({
     const val = e.target.value;
     setInputValue(val);
     const matches = val
-      ? suggestions.filter((s) => normalizeText(s.label).includes(normalizeText(val)))
+      ? suggestions.filter((s) => normalizeText(s.label).startsWith(normalizeText(val)))
       : suggestions;
     setIsOpen(matches.length > 0);
   };

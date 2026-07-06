@@ -35,7 +35,7 @@ export function AutocompleteInput<T = unknown>({
   const filteredSuggestions = useMemo(() => {
     if (!value) return suggestions.slice(0, 8);
     return suggestions.filter((s) =>
-      normalizeText(s.label).includes(normalizeText(value))
+      normalizeText(s.label).startsWith(normalizeText(value))
     );
   }, [value, suggestions]);
 
@@ -84,7 +84,7 @@ export function AutocompleteInput<T = unknown>({
         onChange={(e) => {
           const val = e.target.value;
           onChange(val);
-          const hasMatches = val ? suggestions.some(s => normalizeText(s.label).includes(normalizeText(val))) : suggestions.length > 0;
+          const hasMatches = val ? suggestions.some(s => normalizeText(s.label).startsWith(normalizeText(val))) : suggestions.length > 0;
           setIsOpen(hasMatches);
         }}
         onKeyDown={handleKeyDown}

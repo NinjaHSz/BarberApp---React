@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useClients, useSupabase, useAppointments, useProcedures, useBarbers } from "@/hooks/use-data";
 import { ChevronLeft, Crown, Wand2, Trash2, Calendar, TrendingUp, History, Info, RotateCcw, Plus, Clock, CreditCard, Edit3, CalendarPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import Link from "next/link";
@@ -35,14 +35,24 @@ export default function ClientProfilePage() {
 
   // Local preset state to prevent async saving delay issues
   const [localPreset, setLocalPreset] = useState<any>(null);
+  const localPresetRef = useRef<any>({});
+
+  useEffect(() => {
+    localPresetRef.current = localPreset;
+  }, [localPreset]);
 
   useEffect(() => {
     if (client?.preset) {
-      setLocalPreset(client.preset);
+      try {
+        const parsed = typeof client.preset === "string" ? JSON.parse(client.preset) : client.preset;
+        setLocalPreset(parsed || {});
+      } catch (e) {
+        setLocalPreset(client.preset || {});
+      }
     } else {
       setLocalPreset({});
     }
-  }, [client?.preset]);
+  }, [client?.id]);
 
   // States for automatic batch plan scheduling
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
@@ -144,12 +154,12 @@ export default function ClientProfilePage() {
     const suggestedDay = getMostFrequent(dayOfWeekCounts);
 
     const newPreset = {
-      service: localPreset?.service || "",
-      value: localPreset?.value || "",
-      payment: suggestedPayment || localPreset?.payment || "PIX",
-      dayOfWeek: suggestedDay || localPreset?.dayOfWeek || "",
-      time: suggestedTime || localPreset?.time || "",
-      barberId: suggestedBarberId ? Number(suggestedBarberId) : localPreset?.barberId || ""
+      service: localPresetRef.current?.service || "",
+      value: localPresetRef.current?.value || "",
+      payment: suggestedPayment || localPresetRef.current?.payment || "PIX",
+      dayOfWeek: suggestedDay || localPresetRef.current?.dayOfWeek || "",
+      time: suggestedTime || localPresetRef.current?.time || "",
+      barberId: suggestedBarberId ? Number(suggestedBarberId) : localPresetRef.current?.barberId || ""
     };
 
     setLocalPreset(newPreset);
@@ -166,6 +176,12 @@ export default function ClientProfilePage() {
         return dateB.getTime() - dateA.getTime();
       });
   }, [appointments, client]);
+
+  const lastAppointmentId = useMemo(() => {
+    const todayStr = format(new Date(), "yyyy-MM-dd");
+    const pastOrToday = clientAppointments.find(a => a.date <= todayStr);
+    return pastOrToday ? pastOrToday.id : null;
+  }, [clientAppointments]);
 
   const lastPlanDayNumber = useMemo(() => {
     if (!client) return 0;
@@ -190,7 +206,7 @@ export default function ClientProfilePage() {
     if (!client) return [];
 
     if (procedureNaming === "preset") {
-      const presetService = client.preset?.service || "A DEFINIR";
+      const presetService = localPreset?.service || "A DEFINIR";
       return generatedAppointments.map(appt => ({
         ...appt,
         procedureName: presetService
@@ -298,10 +314,20 @@ export default function ClientProfilePage() {
   // Mutations
   const updateMutation = useMutation({
     mutationFn: async (data: any) => {
-      const { error } = await supabase.from("clientes").update(data).eq("id", id);
+      const { error } = await supabase.from("clientes").update(data).eq("id", Number(id));
       if (error) throw error;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["clients"] }),
+    onError: (err: any) => {
+      const details = {
+        message: err.message,
+        details: err.details,
+        hint: err.hint,
+        code: err.code,
+      };
+      console.error("Update mutation error details:", details);
+      triggerAlert("Erro", `Erro ao salvar dados do cliente: ${err.message || err.details || JSON.stringify(details)}`);
+    }
   });
 
   const updateClientAndMigrateHistoryMutation = useMutation({
@@ -309,7 +335,7 @@ export default function ClientProfilePage() {
       const { error: clientError } = await supabase
         .from("clientes")
         .update({ nome: newName })
-        .eq("id", id);
+        .eq("id", Number(id));
       if (clientError) throw clientError;
 
       if (migrate && client?.nome) {
@@ -385,9 +411,9 @@ export default function ClientProfilePage() {
         const { error } = await supabase.from(tableName).insert({
           cliente: client.nome,
           procedimento: appt.procedureName,
-          valor: parseFloat(client.preset?.value) || 0,
-          forma_pagamento: client.preset?.payment || "PLANO",
-          observacoes: "AGENDAMENTO AUTOMÁTICO DO PLANO",
+          valor: procedureNaming === "preset" ? (parseFloat(localPreset?.value) || 0) : 0,
+          forma_pagamento: procedureNaming === "preset" ? (localPreset?.payment || "PLANO") : "PLANO",
+          observacoes: "AGENDAMENTO AUTOMÁTICO",
           data: appt.date,
           horario: appt.time,
           barbeiro_id: appt.barberId,
@@ -403,7 +429,7 @@ export default function ClientProfilePage() {
     }
   });
 
-  const getNextFourDates = (dayOfWeekName: string, count: number = 4): string[] => {
+  const getNextFourDates = (dayOfWeekName: string, count: number = 4, startDate: Date = new Date()): string[] => {
     const daysMap: { [key: string]: number } = {
       "domingo": 0, "segunda-feira": 1, "terça-feira": 2, "quarta-feira": 3,
       "quinta-feira": 4, "sexta-feira": 5, "sábado": 6
@@ -412,7 +438,7 @@ export default function ClientProfilePage() {
     if (targetDay === undefined) return [];
 
     const dates: string[] = [];
-    const currentDate = new Date();
+    const currentDate = new Date(startDate.getTime());
     
     while (dates.length < count) {
       currentDate.setDate(currentDate.getDate() + 1);
@@ -487,12 +513,20 @@ export default function ClientProfilePage() {
     const hasPlan = client.plano && client.plano !== "Nenhum";
     const batchSize = hasPlan ? (client.limite_cortes || 4) : 4;
 
-    const nextDates = getNextFourDates(presetDay, batchSize);
+    const latestAppt = clientAppointments[0];
+    const baseDate = latestAppt ? new Date(latestAppt.date + "T12:00:00") : new Date();
+
+    const nextDates = getNextFourDates(presetDay, batchSize, baseDate);
     if (nextDates.length === 0) return;
 
     // Reset settings to defaults
     setIntervalDays(7);
     setBatchCount(batchSize);
+    if (localPreset?.service) {
+      setProcedureNaming("preset");
+    } else {
+      setProcedureNaming("x-dia");
+    }
     const initialFirstDate = nextDates[0];
     setFirstDate(initialFirstDate);
 
@@ -633,7 +667,7 @@ export default function ClientProfilePage() {
                   <PaymentSelector
                     value={cfg.value}
                     onChange={(val) => {
-                      const updatedPreset = { ...(localPreset || {}), payment: val };
+                      const updatedPreset = { ...(localPresetRef.current || {}), payment: val };
                       setLocalPreset(updatedPreset);
                       updateMutation.mutate({ preset: updatedPreset });
                     }}
@@ -647,7 +681,7 @@ export default function ClientProfilePage() {
                       ...["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"].map(d => ({ value: d, label: d }))
                     ]}
                     onSelect={(val) => {
-                      const updatedPreset = { ...(localPreset || {}), dayOfWeek: val };
+                      const updatedPreset = { ...(localPresetRef.current || {}), dayOfWeek: val };
                       setLocalPreset(updatedPreset);
                       updateMutation.mutate({ preset: updatedPreset });
                     }}
@@ -662,7 +696,7 @@ export default function ClientProfilePage() {
                       ...barbers.map((b: any) => ({ value: b.id, label: b.nome }))
                     ]}
                     onSelect={(val) => {
-                      const updatedPreset = { ...(localPreset || {}), barberId: val ? Number(val) : "" };
+                      const updatedPreset = { ...(localPresetRef.current || {}), barberId: val ? Number(val) : "" };
                       setLocalPreset(updatedPreset);
                       updateMutation.mutate({ preset: updatedPreset });
                     }}
@@ -685,7 +719,7 @@ export default function ClientProfilePage() {
                         formattedVal = /^\d+$/.test(trimmed) ? `${trimmed}º DIA` : trimmed;
                         formattedVal = formattedVal.toUpperCase();
                       }
-                      const updatedPreset = { ...(localPreset || {}), [cfg.field]: formattedVal };
+                      const updatedPreset = { ...(localPresetRef.current || {}), [cfg.field]: formattedVal };
                       updateMutation.mutate({ preset: updatedPreset });
                     }}
                     className="bg-transparent border-none text-[11px] font-black text-white uppercase outline-none w-full p-0"
@@ -802,6 +836,7 @@ export default function ClientProfilePage() {
                <div className="py-20 text-center text-text-muted italic text-[10px] uppercase font-bold tracking-widest opacity-20">Sem histórico</div>
             ) : (
                clientAppointments.map((appt) => {
+                 const isLast = appt.id === lastAppointmentId;
                  const handleCardClick = (e: React.MouseEvent) => {
                    const target = e.target as HTMLElement;
                    if (target.closest("input, button, select, [role='button'], .interactive")) {
@@ -815,7 +850,12 @@ export default function ClientProfilePage() {
                    <div 
                      key={appt.id} 
                      onClick={handleCardClick}
-                     className="flex flex-col md:flex-row items-start md:items-center gap-4 px-6 py-5 bg-surface-section/20 hover:bg-surface-section/40 rounded-3xl transition-all group border-none cursor-pointer"
+                     className={cn(
+                       "flex flex-col md:flex-row items-start md:items-center gap-4 px-6 py-5 rounded-3xl transition-all group border-none cursor-pointer",
+                       isLast 
+                         ? "bg-surface-subtle/80 hover:bg-surface-subtle ring-1 ring-brand-primary/20 shadow-lg shadow-brand-primary/5" 
+                         : "bg-surface-section/20 hover:bg-surface-section/40"
+                     )}
                    >
                      <div className="flex items-center gap-4 shrink-0">
                        <div className="w-12 h-12 rounded-2xl bg-surface-page flex flex-col items-center justify-center shadow-lg">
@@ -841,6 +881,11 @@ export default function ClientProfilePage() {
                            onSave={(v) => updateAppointmentMutation.mutate({ id: appt.id, updates: { service: v }, barberId: appt.barberId })}
                            className="text-[12px] font-black text-white uppercase tracking-wide group-hover:text-brand-primary transition-colors h-auto"
                          />
+                         {isLast && (
+                           <span className="px-1.5 py-0.5 bg-brand-primary text-surface-page text-[8px] font-black uppercase rounded tracking-widest shrink-0 select-none">
+                             Último
+                           </span>
+                         )}
                          <PaymentSelector
                            value={appt.paymentMethod || "PIX"}
                            onChange={(val) => updateAppointmentMutation.mutate({ id: appt.id, updates: { paymentMethod: val }, barberId: appt.barberId })}
@@ -1025,7 +1070,7 @@ export default function ClientProfilePage() {
               onChange={(e) => setProcedureNaming(e.target.value as "preset" | "x-dia")}
               className="w-full py-2.5 px-4 rounded-xl bg-surface-page border border-white/[0.05] text-[11px] font-black uppercase outline-none text-white focus:border-brand-primary transition-all cursor-pointer"
             >
-              <option value="preset" className="bg-[#121214]">Usar Preset do Cliente ({client.preset?.service || "A DEFINIR"})</option>
+              <option value="preset" className="bg-[#121214]">Usar Preset do Cliente ({localPreset?.service || "A DEFINIR"})</option>
               <option value="x-dia" className="bg-[#121214]">Usar Contagem do Plano ("Xº DIA")</option>
             </select>
           </div>

@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { format } from "date-fns";
 import { supabase } from "@/lib/supabase";
@@ -34,6 +34,7 @@ export function useDashboardRevenue(
       )
       .subscribe();
 
+  
     return () => {
       supabase.removeChannel(channel);
     };
@@ -43,5 +44,6 @@ export function useDashboardRevenue(
     queryKey: ["dashboard-revenue", dateStr, chartTimeframe],
     queryFn: () => fetchDashboardRevenue(referenceDate, granularity),
     staleTime: 60_000,
+    placeholderData: keepPreviousData,
   });
 }

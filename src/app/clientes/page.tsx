@@ -109,8 +109,8 @@ export default function ClientsPage() {
     if (searchTerm) {
       const s = searchTerm.toLowerCase();
       result = result.filter(c => 
-        c.nome?.toLowerCase().includes(s) || 
-        c.telefone?.toLowerCase().includes(s)
+        c.nome?.toLowerCase().startsWith(s) || 
+        c.telefone?.toLowerCase().startsWith(s)
       );
     }
 
