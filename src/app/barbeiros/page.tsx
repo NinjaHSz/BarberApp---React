@@ -182,22 +182,22 @@ export default function BarbersPage() {
         </div>
       ) : (
         <div className="bg-surface-section/20 rounded-[2rem] overflow-hidden shadow-2xl p-2 border-none">
-          <div className="hidden md:grid md:grid-cols-[1fr_auto] gap-4 px-6 py-4 text-[9px] font-black text-text-muted uppercase tracking-widest border-b border-white/[0.02]">
+          <div className="hidden md:flex items-center justify-between gap-4 px-4 py-2.5 text-[9px] font-black text-text-muted uppercase tracking-widest border-b border-white/[0.02]">
             <span>Nome do Profissional</span>
-            <span className="text-right">Ações</span>
+            <span className="pr-4">Ações</span>
           </div>
 
           <div className="divide-y divide-white/[0.02]">
             {filteredBarbers.map((barber) => (
-              <div key={barber.id} className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-center px-6 py-4 hover:bg-white/[0.01] transition-colors relative group">
-                <Link href={`/barbeiros/${barber.id}`} className="flex items-center gap-4 flex-1">
-                  <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-text-secondary shrink-0">
-                    <User size={18} />
+              <div key={barber.id} className="flex items-center justify-between gap-4 px-4 py-2 hover:bg-white/[0.01] transition-colors relative group">
+                <Link href={`/barbeiros/${barber.id}`} className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-text-secondary shrink-0">
+                    <User size={14} />
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-black text-white uppercase tracking-tight">{barber.nome}</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs font-black text-white uppercase tracking-tight truncate">{barber.nome}</span>
                     <span className={cn(
-                      "text-[8px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest inline-block",
+                      "text-[7px] px-1.5 py-0.5 rounded-full font-black uppercase tracking-widest inline-block shrink-0",
                       barber.ativo !== false ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"
                     )}>
                       {barber.ativo !== false ? "Ativo" : "Inativo"}
@@ -205,18 +205,18 @@ export default function BarbersPage() {
                   </div>
                 </Link>
 
-                <div className="flex items-center justify-end gap-2 mt-4 md:mt-0">
+                <div className="flex items-center gap-1.5 shrink-0">
                   <button 
                     onClick={() => handleOpenModal(barber)}
-                    className="w-9 h-9 rounded-xl bg-white/5 text-text-secondary hover:bg-brand-primary hover:text-surface-page transition-all flex items-center justify-center border-none"
+                    className="w-7 h-7 rounded-lg bg-white/5 text-text-secondary hover:bg-brand-primary hover:text-surface-page transition-all flex items-center justify-center border-none"
                   >
-                    <Edit2 size={14} />
+                    <Edit2 size={12} />
                   </button>
                   <button 
                     onClick={(e) => handleDelete(barber, e)}
-                    className="w-9 h-9 rounded-xl bg-white/5 text-rose-500/50 hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center border-none"
+                    className="w-7 h-7 rounded-lg bg-white/5 text-rose-500/50 hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center border-none"
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={12} />
                   </button>
                 </div>
               </div>

@@ -16,6 +16,7 @@ import { PaymentSelector } from "@/components/shared/payment-selector";
 import { PremiumSelector } from "@/components/shared/premium-selector";
 import { Modal } from "@/components/shared/modal";
 import { DayPicker } from "react-day-picker";
+import { syncAvatar } from "@/lib/avatar-sync";
 
 export default function ClientProfilePage() {
   const { id } = useParams();
@@ -53,6 +54,12 @@ export default function ClientProfilePage() {
       setLocalPreset({});
     }
   }, [client?.id]);
+
+  useEffect(() => {
+    if (client && client.telefone && !client.foto_url) {
+      syncAvatar(client.id, client.telefone).catch(console.error);
+    }
+  }, [client?.id, client?.telefone, client?.foto_url]);
 
   // States for automatic batch plan scheduling
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);

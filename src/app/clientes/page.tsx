@@ -3,12 +3,13 @@
 import { useClients, useSupabase, useBarbers } from "@/hooks/use-data";
 import { Plus, Search, Filter, Trash2, Edit2, User, Phone, MapPin, Crown, ChevronRight, XCircle, LayoutGrid, List, Check, Loader2, Sparkles, Link2, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { PremiumSelector } from "@/components/shared/premium-selector";
 import { Modal } from "@/components/shared/modal";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { InlineInput } from "@/components/shared/inline-input";
+import { syncAvatar } from "@/lib/avatar-sync";
 
 function getJaroWinklerSimilarity(s1: string, s2: string): number {
   let m = 0;
@@ -126,6 +127,21 @@ export default function ClientsPage() {
     return { total: clients.length, vip };
   }, [clients]);
 
+  useEffect(() => {
+    if (clients && clients.length > 0) {
+      const toSync = clients.filter((c: any) => c.telefone && !c.foto_url);
+      if (toSync.length > 0) {
+        const runSync = async () => {
+          for (const client of toSync.slice(0, 10)) {
+            await syncAvatar(client.id, client.telefone).catch(console.error);
+            await new Promise(r => setTimeout(r, 600));
+          }
+        };
+        runSync();
+      }
+    }
+  }, [clients]);
+
   const saveMutation = useMutation({
     mutationFn: async ({ data, migrate }: { data: any; migrate?: boolean }) => {
       const cleanData = { ...data };
@@ -136,9 +152,11 @@ export default function ClientsPage() {
       const clientObj = cleanData.id ? clients.find(c => String(c.id) === String(cleanData.id)) : null;
       const oldName = clientObj?.nome;
 
+      let savedClient = null;
       if (cleanData.id) {
-        const { error } = await supabase.from("clientes").update(cleanData).eq("id", cleanData.id);
+        const { data: updated, error } = await supabase.from("clientes").update(cleanData).eq("id", cleanData.id).select().single();
         if (error) throw error;
+        savedClient = updated;
 
         if (migrate && oldName && cleanData.nome && oldName !== cleanData.nome) {
           const newName = cleanData.nome;
@@ -146,8 +164,13 @@ export default function ClientsPage() {
           await supabase.from("agendamentos_joao_lucas").update({ cliente: newName }).ilike("cliente", oldName);
         }
       } else {
-        const { error } = await supabase.from("clientes").insert([cleanData]);
+        const { data: inserted, error } = await supabase.from("clientes").insert([cleanData]).select().single();
         if (error) throw error;
+        savedClient = inserted;
+      }
+
+      if (savedClient?.id && savedClient?.telefone) {
+        syncAvatar(savedClient.id, savedClient.telefone).catch(console.error);
       }
     },
     onSuccess: () => {

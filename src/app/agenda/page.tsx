@@ -363,44 +363,44 @@ const RecordRow = memo(function RecordRowComponent({
         </div> 
       </div>
 
-      <div className="md:hidden grid grid-cols-[70px_1fr_auto] gap-4 items-center px-6 py-4 bg-surface-section/40 rounded-2xl mx-1 my-1 border-none focus-within:z-[100] z-[1]">
-        <div className="text-[13px] text-text-primary font-bold">
+      <div className="md:hidden grid grid-cols-[55px_1fr_auto] gap-2 items-center px-4 py-2.5 bg-surface-section/40 rounded-2xl mx-3.5 my-1 border-none focus-within:z-[100] z-[1]">
+        <div className="text-xs text-text-primary font-bold">
           {record.time.substring(0, 5)}
         </div>
-        <div className={cn("text-[13px] font-black truncate uppercase", isEmpty ? "text-text-muted" : "text-white")}>
+        <div className={cn("text-xs font-black truncate uppercase", isEmpty ? "text-text-muted" : "text-white")}>
           {isBreak ? "PAUSA" : record.client}
         </div>
-        <div className="flex justify-end items-center gap-2">
+        <div className="flex justify-end items-center gap-1.5">
           {!isEmpty ? (
-            <div className="flex gap-2">
+            <div className="flex gap-1.5">
                {hasPhone && (
                  <button 
                    onClick={handleWhatsAppClick} 
                    className={cn(
-                     "w-10 h-10 flex items-center justify-center rounded-xl bg-surface-subtle active:scale-90 border-none",
+                     "w-7 h-7 flex items-center justify-center rounded-lg bg-surface-subtle active:scale-90 border-none",
                      record.whatsappSent ? "text-yellow-500" : "text-[#25D366]/70"
                    )}
                  >
                    {confirmingWhatsApp ? (
-                     <span className="font-black text-sm leading-none animate-pulse">?</span>
+                     <span className="font-black text-xs leading-none animate-pulse">?</span>
                    ) : (
-                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="fill-current">
+                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="fill-current">
                        <path d="M17.472 14.382C17.175 14.233 15.714 13.515 15.442 13.415C15.169 13.316 14.971 13.267 14.772 13.565C14.575 13.862 14.005 14.531 13.832 14.729C13.659 14.928 13.485 14.952 13.188 14.804C12.891 14.654 11.933 14.341 10.798 13.329C9.91501 12.541 9.31801 11.568 9.14501 11.27C8.97201 10.973 9.12701 10.812 9.27501 10.664C9.40901 10.531 9.57301 10.317 9.72101 10.144C9.87001 9.97004 9.91901 9.84604 10.019 9.64704C10.118 9.44904 10.069 9.27604 9.99401 9.12704C9.91901 8.97804 9.32501 7.51504 9.07801 6.92004C8.83601 6.34104 8.59101 6.42004 8.40901 6.41004C8.23601 6.40204 8.03801 6.40004 7.83901 6.40004C7.64101 6.40004 7.31901 6.47404 7.04701 6.77204C6.77501 7.06904 6.00701 7.78804 6.00701 9.25104C6.00701 10.713 7.07201 12.126 7.22001 12.325C7.36901 12.523 9.31601 15.525 12.297 16.812C13.006 17.118 13.559 17.301 13.991 17.437C14.703 17.664 15.351 17.632 15.862 17.555C16.433 17.47 17.62 16.836 17.868 16.142C18.116 15.448 18.116 14.853 18.041 14.729C17.967 14.605 17.77 14.531 17.472 14.382ZM12.05 21.785H12.046C10.2758 21.7852 8.53809 21.3092 7.01501 20.407L6.65401 20.193L2.91301 21.175L3.91101 17.527L3.67601 17.153C2.68645 15.5773 2.16295 13.7537 2.16601 11.893C2.16701 6.44304 6.60201 2.00904 12.054 2.00904C14.694 2.00904 17.176 3.03904 19.042 4.90704C19.9627 5.82366 20.6924 6.91377 21.189 8.11428C21.6856 9.3148 21.9392 10.6019 21.935 11.901C21.932 17.351 17.498 21.785 12.05 21.785ZM20.463 3.48804C19.3612 2.37896 18.0502 1.49958 16.6061 0.900841C15.162 0.302105 13.6133 -0.00407625 12.05 4.09775e-05C5.49501 4.09775e-05 0.160007 5.33504 0.157007 11.892C0.157007 13.988 0.704007 16.034 1.74501 17.837L0.0570068 24L6.36201 22.346C8.1056 23.296 10.0594 23.7938 12.045 23.794H12.05C18.604 23.794 23.94 18.459 23.943 11.901C23.9478 10.3383 23.6428 8.79014 23.0454 7.34607C22.4481 5.90201 21.5704 4.59071 20.463 3.48804Z" fill="currentColor"/>
                      </svg>
                    )}
                  </button>
                )}
-               <button onClick={() => onEdit(record)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-subtle text-text-secondary active:scale-90 border-none">
-                 <Edit size={18} />
+               <button onClick={() => onEdit(record)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-surface-subtle text-text-secondary active:scale-90 border-none">
+                 <Edit size={13} />
                </button>
-               <button onClick={() => onCancel(record)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-subtle text-text-secondary active:scale-90 border-none">
-                 <Trash2 size={18} />
+               <button onClick={() => onCancel(record)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-surface-subtle text-text-secondary active:scale-90 border-none">
+                 <Trash2 size={13} />
                </button>
             </div>
           ) : (
             <button 
               onClick={() => onAdd(record.time, record.date, record.barberId ? Number(record.barberId) : undefined)}
-              className="px-4 py-2 rounded-lg bg-text-primary text-surface-page text-[10px] font-black uppercase active:scale-95 border-none"
+              className="px-2.5 py-1.5 rounded-lg bg-text-primary text-surface-page text-[9px] font-black uppercase active:scale-95 border-none"
             >
               Agendar
             </button>
@@ -1070,28 +1070,28 @@ export default function AgendaPage() {
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
         {/* Title & Date Selectors */}
         <div className="flex flex-wrap items-center gap-4 shrink-0">
-          <div>
+          <div className="hidden md:block">
             <h2 className="text-text-primary text-3xl font-black tracking-tight uppercase italic leading-none">Agenda</h2>
             <p className="text-text-secondary text-[8px] font-black uppercase tracking-widest mt-1">Sincronização Ativa</p>
           </div>
 
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-center gap-1 flex-nowrap">
             <div className="flex items-center bg-surface-section rounded-2xl p-0.5 shrink-0">
-              <button onClick={() => handleDayChange(-1)} className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-white transition-colors border-none"><ChevronLeft size={14} /></button>
-              <PremiumSelector value={currentDate.getDate()} options={dayOptions} onSelect={handleDaySelect} className="bg-transparent !px-2 !py-1.5 w-[85px]" />
-              <button onClick={() => handleDayChange(1)} className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-white transition-colors border-none"><ChevronRight size={14} /></button>
+              <button onClick={() => handleDayChange(-1)} className="w-6 h-6 md:w-8 md:h-8 flex items-center justify-center text-text-muted hover:text-white transition-colors border-none"><ChevronLeft size={12} className="md:size-[14px]" /></button>
+              <PremiumSelector value={currentDate.getDate()} options={dayOptions} onSelect={handleDaySelect} className="bg-transparent !px-1 md:!px-2 !py-1 md:!py-1.5 w-[70px] md:w-[85px] text-[10px] md:text-[11px]" />
+              <button onClick={() => handleDayChange(1)} className="w-6 h-6 md:w-8 md:h-8 flex items-center justify-center text-text-muted hover:text-white transition-colors border-none"><ChevronRight size={12} className="md:size-[14px]" /></button>
             </div>
-            <div className="flex items-center bg-surface-section rounded-2xl p-0.5 shrink-0"><PremiumSelector value={currentDate.getMonth() + 1} options={monthOptions} onSelect={handleMonthSelect} className="bg-transparent !px-3 !py-1.5 min-w-[70px]" /></div>
-            <div className="flex items-center bg-surface-section rounded-2xl p-0.5 shrink-0"><PremiumSelector value={currentDate.getFullYear()} options={yearOptions} onSelect={handleYearSelect} className="bg-transparent !px-3 !py-1.5 min-w-[55px]" /></div>
+            <div className="flex items-center bg-surface-section rounded-2xl p-0.5 shrink-0"><PremiumSelector value={currentDate.getMonth() + 1} options={monthOptions} onSelect={handleMonthSelect} className="bg-transparent !px-1.5 md:!px-3 !py-1 md:!py-1.5 min-w-[55px] md:min-w-[70px] text-[10px] md:text-[11px]" /></div>
+            <div className="flex items-center bg-surface-section rounded-2xl p-0.5 shrink-0"><PremiumSelector value={currentDate.getFullYear()} options={yearOptions} onSelect={handleYearSelect} className="bg-transparent !px-1.5 md:!px-3 !py-1 md:!py-1.5 min-w-[45px] md:min-w-[55px] text-[10px] md:text-[11px]" /></div>
             
             <button 
               onClick={handleSync} 
               className={cn(
-                "w-9 h-9 rounded-2xl bg-surface-section hover:bg-surface-subtle transition-all flex items-center justify-center border-none shrink-0 ml-0.5", 
+                "w-7 h-7 md:w-9 md:h-9 rounded-xl md:rounded-2xl bg-surface-section hover:bg-surface-subtle transition-all flex items-center justify-center border-none shrink-0 ml-0.5", 
                 isSyncing && "animate-spin"
               )}
             >
-              <RefreshCw size={14} className="text-text-primary" />
+              <RefreshCw size={12} className="md:size-[14px] text-text-primary" />
             </button>
           </div>
         </div>
@@ -1099,9 +1099,9 @@ export default function AgendaPage() {
         {/* Toolbar: Search, Eye, Copy, Barber Tabs, Add */}
         <div className="flex flex-wrap items-center gap-3 flex-1 xl:justify-end">
           {/* Search Box & Controls Group */}
-          <div className="flex flex-wrap gap-2 items-center bg-surface-section/30 p-2 rounded-2xl border-none shadow-2xl flex-1 max-w-xl">
+          <div className="flex flex-nowrap gap-2 items-center bg-surface-section/30 p-2 rounded-2xl border-none shadow-2xl flex-1 max-w-xl">
             {/* Search Input */}
-            <div className="flex-1 min-w-[150px] relative group">
+            <div className="flex-1 min-w-[80px] md:min-w-[150px] relative group">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-brand-primary transition-colors z-10" size={14} />
               <input 
                 value={searchTerm} 
