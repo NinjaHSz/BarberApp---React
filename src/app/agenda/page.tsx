@@ -761,12 +761,26 @@ export default function AgendaPage() {
 
       const messageText = `⛑️Passando para lembrar do seu agendamento aqui em Lucas do Corte Barbearia. Podemos confirmar? ${dateLabel} às ${record.time.substring(0, 5)}`;
 
-      const success = await copyToClipboard(messageText);
-      if (!success) {
-        throw new Error("Copy failed");
+      const clientObj = (clients || []).find(
+        (c: any) => c.nome?.toLowerCase() === record.client?.toLowerCase()
+      );
+      const phone = clientObj?.telefone;
+
+      if (phone) {
+        let cleanPhone = phone.replace(/\D/g, "");
+        if (cleanPhone.length > 0 && !cleanPhone.startsWith("55")) {
+          cleanPhone = "55" + cleanPhone;
+        }
+        window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(messageText)}`, "_blank");
+        setPeriodFilterName("Lembrete no WhatsApp");
+      } else {
+        const success = await copyToClipboard(messageText);
+        if (!success) {
+          throw new Error("Copy failed");
+        }
+        setPeriodFilterName("Lembrete Copiado");
       }
 
-      setPeriodFilterName("Lembrete Copiado");
       setCopiedSlots([`${record.time.substring(0, 5)} — ${record.client.toUpperCase()}`]);
       setCopied(true);
       
@@ -778,8 +792,8 @@ export default function AgendaPage() {
       });
     } catch (error) {
       console.error(error);
-      setPeriodFilterName("Erro ao Copiar");
-      setCopiedSlots(["Erro ao copiar mensagem"]);
+      setPeriodFilterName("Erro no Lembrete");
+      setCopiedSlots(["Falha ao processar ação"]);
       setCopied(true);
     }
 
@@ -788,7 +802,7 @@ export default function AgendaPage() {
       setCopiedSlots([]);
       setPeriodFilterName("");
     }, 3000);
-  }, [selectedDateStr, updateMutation]);
+  }, [selectedDateStr, updateMutation, clients]);
 
   const confirmCancel = () => {
     if (recordToCancel) {
