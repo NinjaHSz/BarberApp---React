@@ -8,6 +8,7 @@ import { MobileDock } from "@/components/layout/mobile-dock";
 import { MobileSyncButton } from "@/components/layout/mobile-sync-button";
 import { KeyboardNavigation } from "@/components/layout/keyboard-navigation";
 import ClickSpark from "@/components/ui/click-spark";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -70,6 +71,7 @@ export default function RootLayout({
             </div>
           </ClickSpark>
         </Providers>
+        <SpeedInsights />
       </body>
     </html>
   );
