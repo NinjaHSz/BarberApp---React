@@ -132,6 +132,16 @@ const RecordRow = memo(function RecordRowComponent({
 
   const handleClientSave = async (clientName: string) => {
     const cleanName = (clientName || "").trimEnd();
+    if (cleanName.toUpperCase() === "PAUSA") {
+      onUpdate(record.id, {
+        client: "PAUSA",
+        service: "RESERVADO",
+        value: 0,
+        paymentMethod: "CORTESIA",
+        observations: "Horário reservado/pausa"
+      });
+      return;
+    }
     const updates: Partial<Appointment> = { client: cleanName || "---" };
     const match = clients.find(
       (c) => c.nome?.toLowerCase() === cleanName?.toLowerCase()

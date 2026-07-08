@@ -71,6 +71,15 @@ export default function ClientProfilePage() {
   const [batchCount, setBatchCount] = useState<number>(4);
   const [procedureNaming, setProcedureNaming] = useState<"preset" | "x-dia">("x-dia");
   
+  // Second default day states for batch scheduling
+  const [hasSecondDay, setHasSecondDay] = useState(false);
+  const [secondDayOfWeek, setSecondDayOfWeek] = useState("Terça-feira");
+  const [secondDayTime, setSecondDayTime] = useState("14:00");
+
+  // Multi-selection states for timeline appointments
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedApptIds, setSelectedApptIds] = useState<string[]>([]);
+  
   // Pending Name Migration State
   const [isNameModalOpen, setIsNameModalOpen] = useState(false);
   const [pendingName, setPendingName] = useState("");
@@ -406,6 +415,24 @@ export default function ClientProfilePage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["appointments"] }),
   });
 
+  const deleteMultipleAppointmentsMutation = useMutation({
+    mutationFn: async (appts: { id: string, barberId?: string | number | null }[]) => {
+      for (const appt of appts) {
+        const tableName = Number(appt.barberId) === 3 ? "agendamentos_joao_lucas" : "agendamentos_lucas";
+        const { error } = await supabase.from(tableName).delete().eq("id", appt.id);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      setSelectedApptIds([]);
+      setIsSelectionMode(false);
+    },
+    onError: (err: any) => {
+      triggerAlert("Erro", `Erro ao excluir agendamentos: ${err.message}`);
+    }
+  });
+
   const saveBatchMutation = useMutation({
     mutationFn: async () => {
       const appointmentsToSave = computedAppointmentsWithNames;
@@ -471,21 +498,75 @@ export default function ClientProfilePage() {
     return `${h}:${m}`;
   };
 
-  const regenerateList = (newFirstDate: string, currentInterval: number = intervalDays, currentCount: number = batchCount) => {
+  const regenerateList = (
+    newFirstDate: string,
+    currentInterval: number = intervalDays,
+    currentCount: number = batchCount,
+    useSecondDay: boolean = hasSecondDay,
+    secDayName: string = secondDayOfWeek,
+    secTime: string = secondDayTime
+  ) => {
+    const presetDay = localPreset?.dayOfWeek;
     const presetTime = localPreset?.time || "14:00";
     const presetBarberId = localPreset?.barberId ? Number(localPreset.barberId) : (barbers[0]?.id || 1);
     const formattedTime = formatTimeHHMM(presetTime);
+    const formattedSecondTime = formatTimeHHMM(secTime);
 
-    const list = Array.from({ length: currentCount }).map((_, idx) => {
-      const date = new Date(newFirstDate + "T12:00:00");
-      date.setDate(date.getDate() + (idx * currentInterval));
-      return {
-        date: format(date, "yyyy-MM-dd"),
-        time: formattedTime,
-        barberId: presetBarberId
+    if (useSecondDay && presetDay && secDayName) {
+      const daysMap: { [key: string]: number } = {
+        "domingo": 0, "segunda-feira": 1, "terça-feira": 2, "quarta-feira": 3,
+        "quinta-feira": 4, "sexta-feira": 5, "sábado": 6
       };
-    });
-    setGeneratedAppointments(list);
+
+      const getDatesForDay = (dayName: string, count: number, start: string) => {
+        const targetDay = daysMap[dayName.toLowerCase()];
+        if (targetDay === undefined) return [];
+        const datesList: string[] = [];
+        const cur = new Date(start + "T12:00:00");
+        
+        if (cur.getDay() === targetDay) {
+          datesList.push(format(cur, "yyyy-MM-dd"));
+        }
+        
+        while (datesList.length < count) {
+          cur.setDate(cur.getDate() + 1);
+          if (cur.getDay() === targetDay) {
+            datesList.push(format(cur, "yyyy-MM-dd"));
+          }
+        }
+        return datesList;
+      };
+
+      const dates1 = getDatesForDay(presetDay, currentCount, newFirstDate);
+      const dates2 = getDatesForDay(secDayName, currentCount, newFirstDate);
+
+      interface ApptListItem {
+        date: string;
+        time: string;
+        barberId: number;
+      }
+      const combined: ApptListItem[] = [];
+      dates1.forEach(d => {
+        combined.push({ date: d, time: formattedTime, barberId: presetBarberId });
+      });
+      dates2.forEach(d => {
+        combined.push({ date: d, time: formattedSecondTime, barberId: presetBarberId });
+      });
+
+      combined.sort((a, b) => a.date.localeCompare(b.date));
+      setGeneratedAppointments(combined.slice(0, currentCount));
+    } else {
+      const list = Array.from({ length: currentCount }).map((_, idx) => {
+        const date = new Date(newFirstDate + "T12:00:00");
+        date.setDate(date.getDate() + (idx * currentInterval));
+        return {
+          date: format(date, "yyyy-MM-dd"),
+          time: formattedTime,
+          barberId: presetBarberId
+        };
+      });
+      setGeneratedAppointments(list);
+    }
   };
 
   const getDatesRangeLabel = () => {
@@ -529,6 +610,7 @@ export default function ClientProfilePage() {
     // Reset settings to defaults
     setIntervalDays(7);
     setBatchCount(batchSize);
+    setHasSecondDay(false);
     if (localPreset?.service) {
       setProcedureNaming("preset");
     } else {
@@ -835,7 +917,45 @@ export default function ClientProfilePage() {
          <div className="flex justify-between items-center px-4">
             <h3 className="text-[10px] font-black text-text-muted uppercase tracking-widest">Linha do Tempo de Atendimento</h3>
             <div className="h-px flex-1 mx-6 bg-white/5" />
-            <span className="text-[9px] font-black text-text-muted tabular-nums">{clientAppointments.length} REGISTROS</span>
+            <div className="flex items-center gap-3">
+              {isSelectionMode ? (
+                <>
+                  <button
+                    onClick={() => {
+                      const selectedAppts = clientAppointments
+                        .filter(a => selectedApptIds.includes(a.id))
+                        .map(a => ({ id: a.id, barberId: a.barberId }));
+                      if (selectedAppts.length > 0) {
+                        deleteMultipleAppointmentsMutation.mutate(selectedAppts);
+                      }
+                    }}
+                    disabled={selectedApptIds.length === 0 || deleteMultipleAppointmentsMutation.isPending}
+                    className="py-1 px-3 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-[9px] font-black uppercase tracking-wider border-none transition-all cursor-pointer disabled:opacity-40"
+                  >
+                    {deleteMultipleAppointmentsMutation.isPending ? "Excluindo..." : `Excluir ${selectedApptIds.length} Selecionados`}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsSelectionMode(false);
+                      setSelectedApptIds([]);
+                    }}
+                    className="py-1 px-3 rounded-lg bg-white/5 hover:bg-white/10 text-white text-[9px] font-black uppercase tracking-wider border-none transition-all cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                </>
+              ) : (
+                clientAppointments.length > 0 && (
+                  <button
+                    onClick={() => setIsSelectionMode(true)}
+                    className="py-1 px-3 rounded-lg bg-brand-primary text-surface-page text-[9px] font-black uppercase tracking-wider border-none transition-all active:scale-95 cursor-pointer"
+                  >
+                    Selecionar Vários
+                  </button>
+                )
+              )}
+              <span className="text-[9px] font-black text-text-muted tabular-nums">{clientAppointments.length} REGISTROS</span>
+            </div>
          </div>
 
          <div className="space-y-2">
@@ -844,9 +964,18 @@ export default function ClientProfilePage() {
             ) : (
                clientAppointments.map((appt) => {
                  const isLast = appt.id === lastAppointmentId;
+                 const isSelected = selectedApptIds.includes(appt.id);
                  const handleCardClick = (e: React.MouseEvent) => {
                    const target = e.target as HTMLElement;
                    if (target.closest("input, button, select, [role='button'], .interactive")) {
+                     return;
+                   }
+                   if (isSelectionMode) {
+                     setSelectedApptIds(prev =>
+                       prev.includes(appt.id)
+                         ? prev.filter(id => id !== appt.id)
+                         : [...prev, appt.id]
+                     );
                      return;
                    }
                    setSelectedDate(parseISO(appt.date));
@@ -859,11 +988,30 @@ export default function ClientProfilePage() {
                      onClick={handleCardClick}
                      className={cn(
                        "flex flex-col md:flex-row items-start md:items-center gap-4 px-6 py-5 rounded-3xl transition-all group border-none cursor-pointer",
-                       isLast 
+                       isSelected
+                         ? "bg-brand-primary/10 shadow-lg ring-1 ring-brand-primary/30"
+                         : isLast 
                          ? "bg-surface-subtle/80 hover:bg-surface-subtle ring-1 ring-brand-primary/20 shadow-lg shadow-brand-primary/5" 
                          : "bg-surface-section/20 hover:bg-surface-section/40"
                      )}
                    >
+                     {isSelectionMode && (
+                       <div className="flex items-center justify-center shrink-0 pr-1 interactive" onClick={(e) => e.stopPropagation()}>
+                         <input
+                           type="checkbox"
+                           checked={isSelected}
+                           onChange={() => {
+                             setSelectedApptIds(prev =>
+                               prev.includes(appt.id)
+                                 ? prev.filter(id => id !== appt.id)
+                                 : [...prev, appt.id]
+                             );
+                           }}
+                           className="w-4 h-4 cursor-pointer accent-brand-primary"
+                         />
+                       </div>
+                     )}
+
                      <div className="flex items-center gap-4 shrink-0">
                        <div className="w-12 h-12 rounded-2xl bg-surface-page flex flex-col items-center justify-center shadow-lg">
                          <span className="text-[12px] font-black text-brand-primary leading-none">{format(parseISO(appt.date), "dd")}</span>
@@ -918,21 +1066,23 @@ export default function ClientProfilePage() {
                            className="p-0 bg-transparent hover:bg-white/5 transition-all h-auto w-16"
                          />
                        </div>
-                       <button 
-                         onClick={(e) => handleDeleteClick(e, appt.id, appt.barberId)}
-                         className={cn(
-                           "p-3 rounded-2xl bg-white/5 transition-all border-none shrink-0 w-11 h-11 flex items-center justify-center",
-                           confirmingDeleteId === appt.id 
-                             ? "text-rose-500 hover:bg-rose-500 hover:text-white" 
-                             : "text-text-muted hover:text-rose-500 hover:bg-rose-500/10"
-                         )}
-                       >
-                         {confirmingDeleteId === appt.id ? (
-                           <span className="font-black text-[13px] leading-none animate-pulse">?</span>
-                         ) : (
-                           <Trash2 size={16} />
-                         )}
-                       </button>
+                       {!isSelectionMode && (
+                         <button 
+                           onClick={(e) => handleDeleteClick(e, appt.id, appt.barberId)}
+                           className={cn(
+                             "p-3 rounded-2xl bg-white/5 transition-all border-none shrink-0 w-11 h-11 flex items-center justify-center",
+                             confirmingDeleteId === appt.id 
+                               ? "text-rose-500 hover:bg-rose-500 hover:text-white" 
+                               : "text-text-muted hover:text-rose-500 hover:bg-rose-500/10"
+                           )}
+                         >
+                           {confirmingDeleteId === appt.id ? (
+                             <span className="font-black text-[13px] leading-none animate-pulse">?</span>
+                           ) : (
+                             <Trash2 size={16} />
+                           )}
+                         </button>
+                       )}
                      </div>
                    </div>
                  );
@@ -1080,6 +1230,60 @@ export default function ClientProfilePage() {
               <option value="preset" className="bg-[#121214]">Usar Preset do Cliente ({localPreset?.service || "A DEFINIR"})</option>
               <option value="x-dia" className="bg-[#121214]">Usar Contagem do Plano ("Xº DIA")</option>
             </select>
+          </div>
+
+          {/* Second Day Setup */}
+          <div className="p-3 bg-surface-section/40 rounded-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-black text-white uppercase tracking-widest cursor-pointer select-none" htmlFor="toggle-second-day">
+                Ativar Segundo Dia Padrão
+              </label>
+              <input
+                id="toggle-second-day"
+                type="checkbox"
+                checked={hasSecondDay}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setHasSecondDay(checked);
+                  regenerateList(firstDate, intervalDays, batchCount, checked, secondDayOfWeek, secondDayTime);
+                }}
+                className="w-4 h-4 cursor-pointer accent-brand-primary"
+              />
+            </div>
+            
+            {hasSecondDay && (
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="figma-form-group">
+                  <label className="figma-form-label">Segundo Dia da Semana</label>
+                  <select
+                    value={secondDayOfWeek}
+                    onChange={(e) => {
+                      const day = e.target.value;
+                      setSecondDayOfWeek(day);
+                      regenerateList(firstDate, intervalDays, batchCount, hasSecondDay, day, secondDayTime);
+                    }}
+                    className="w-full py-2.5 px-4 rounded-xl bg-surface-page border border-white/[0.05] text-[11px] font-black uppercase outline-none text-white focus:border-brand-primary transition-all cursor-pointer"
+                  >
+                    {["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"].map((d) => (
+                      <option key={d} value={d} className="bg-[#121214]">{d}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="figma-form-group">
+                  <label className="figma-form-label">Horário do Segundo Dia</label>
+                  <input
+                    type="time"
+                    value={secondDayTime}
+                    onChange={(e) => {
+                      const time = e.target.value;
+                      setSecondDayTime(time);
+                      regenerateList(firstDate, intervalDays, batchCount, hasSecondDay, secondDayOfWeek, time);
+                    }}
+                    className="w-full py-2.5 px-4 rounded-xl bg-surface-page border border-white/[0.05] text-[11px] font-black uppercase outline-none text-white focus:border-brand-primary transition-all"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <p className="text-[11px] font-bold text-text-secondary leading-normal">
