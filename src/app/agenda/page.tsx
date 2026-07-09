@@ -769,7 +769,7 @@ export default function AgendaPage() {
         dateLabel = `dia ${dateFormatted}`;
       }
 
-      const messageText = `⛑️Passando para lembrar do seu agendamento aqui em Lucas do Corte Barbearia. Podemos confirmar? ${dateLabel} às ${record.time.substring(0, 5)}`;
+      const messageText = `Passando para lembrar do seu agendamento aqui em Lucas do Corte Barbearia. Podemos confirmar? ${dateLabel} às ${record.time.substring(0, 5)}`;
 
       const clientObj = (clients || []).find(
         (c: any) => c.nome?.toLowerCase() === record.client?.toLowerCase()
